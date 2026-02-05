@@ -9,269 +9,255 @@ import os
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Optix: Professional Options Terminal",
+    page_title="Optix | Professional Terminal",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Professional Dark Theme
+# --- THEME INJECTION (REPLICATING REACT UI) ---
 st.markdown("""
     <style>
-    .main { background-color: #0d1117; color: #c9d1d9; }
-    .stMetric { background-color: #161b22; border: 1px solid #30363d; padding: 15px; border-radius: 8px; }
-    div[data-testid="stExpander"] { border: 1px solid #30363d; background-color: #0d1117; }
-    .signal-badge { font-weight: bold; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
-    .strong-call { background-color: #238636; color: white; }
-    .strong-put { background-color: #da3633; color: white; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Inter', sans-serif;
+        background-color: #0f172a !important;
+    }
+    
+    .stApp {
+        background-color: #0f172a;
+    }
+
+    /* Card Styling */
+    .optix-card {
+        background-color: rgba(30, 41, 59, 0.5);
+        border: 1px solid rgba(51, 65, 85, 0.5);
+        padding: 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {
+        background-color: #0d1117;
+        border-right: 1px solid #1e293b;
+    }
+
+    /* Metric Overrides */
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 700 !important;
+        color: #f8fafc !important;
+    }
+
+    /* Signal Bar Styling */
+    .signal-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        height: 100px;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    .signal-bar-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .signal-bar {
+        width: 100%;
+        border-radius: 4px 4px 0 0;
+        transition: height 0.5s ease;
+    }
+    .signal-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #64748b;
+        margin-top: 8px;
+    }
+    
+    /* Header Badge */
+    .market-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 20px;
+        display: inline-block;
+    }
+    .badge-open { background-color: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.2); }
+    .badge-closed { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+    
+    /* Hide Streamlit components for a cleaner look */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
 # --- DATA ENGINE ---
 @st.cache_data(ttl=60)
 def get_history_data(symbol, period="5d", interval="1m"):
-    """Fetches real-time intraday price data from Yahoo Finance."""
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.history(period=period, interval=interval)
         if df.empty:
-            # Fallback to daily if intraday is unavailable (e.g. historical gaps)
             df = ticker.history(period="1mo", interval="1d")
         return df
-    except Exception as e:
+    except:
         return None
 
 @st.cache_data(ttl=300)
 def get_options_data(symbol):
-    """Fetches the nearest expiry options chain data."""
     try:
         ticker = yf.Ticker(symbol)
-        if not ticker.options:
-            return None
-        
-        # Get the nearest expiration date
+        if not ticker.options: return None
         expiry = ticker.options[0]
         chain = ticker.option_chain(expiry)
-        
-        # Convert to serializable dict of dataframes
-        return {
-            'calls': chain.calls,
-            'puts': chain.puts,
-            'expiry': expiry
-        }
-    except Exception as e:
+        return {'calls': chain.calls, 'puts': chain.puts, 'expiry': expiry}
+    except:
         return None
 
-def calculate_technical_indicators(df):
-    """Computes technical markers for the signal engine."""
-    if df is None or df.empty:
-        return df
-        
-    # 50-period Moving Average
+def calculate_indicators(df):
+    if df is None or df.empty: return df
     df['SMA50'] = df['Close'].rolling(window=50).mean()
-    
-    # RSI (14)
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
-    
-    # Bollinger Bands (20, 2)
     df['BB_Mid'] = df['Close'].rolling(window=20).mean()
     df['BB_Std'] = df['Close'].rolling(window=20).std()
     df['BB_Upper'] = df['BB_Mid'] + (df['BB_Std'] * 2)
     df['BB_Lower'] = df['BB_Mid'] - (df['BB_Std'] * 2)
-    
-    # MACD (12, 26, 9)
-    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-    df['MACD'] = exp1 - exp2
-    df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-    
     return df
 
-# --- SIGNAL ENGINE ---
-def generate_signals(df, options_data):
-    """Computes a multi-factor score for trade bias."""
-    if df is None or len(df) < 50: 
-        return 0, 0, "Wait for data..."
-    
+def get_scores(df, options):
+    if df is None or len(df) < 2: return 0, 0, "Wait"
     latest = df.iloc[-1]
-    call_score = 0
-    put_score = 0
-    
-    # 1. Price vs MA (Trend Following)
-    if latest['Close'] > latest['SMA50']: 
-        call_score += 20
-    else: 
-        put_score += 20
-    
-    # 2. RSI Trend (Mean Reversion)
-    if pd.notnull(latest['RSI']):
-        if latest['RSI'] < 35: 
-            call_score += 25 # Oversold
-        elif latest['RSI'] > 65: 
-            put_score += 25 # Overbought
-    
-    # 3. MACD Momentum
-    if pd.notnull(latest['MACD']) and pd.notnull(latest['MACD_Signal']):
-        if latest['MACD'] > latest['MACD_Signal']: 
-            call_score += 15
-        else: 
-            put_score += 15
-    
-    # 4. Options Volume Skew
-    if options_data is not None:
-        call_vol = options_data['calls']['volume'].sum()
-        put_vol = options_data['puts']['volume'].sum()
-        if call_vol > put_vol: 
-            call_score += 20
-        else: 
-            put_score += 20
-            
-    # Normalize scores
-    total = call_score + put_score
-    if total > 0:
-        call_pct = int((call_score / 80) * 100)
-        put_pct = int((put_score / 80) * 100)
-    else:
-        call_pct, put_pct = 0, 0
+    c_score, p_score = 40, 40 # Base
+    if latest['Close'] > latest.get('SMA50', 0): c_score += 15
+    else: p_score += 15
+    if latest.get('RSI', 50) < 35: c_score += 20
+    elif latest.get('RSI', 50) > 65: p_score += 20
+    if options:
+        if options['calls']['volume'].sum() > options['puts']['volume'].sum(): c_score += 15
+        else: p_score += 15
+    status = "Strong" if c_score > 75 or p_score > 75 else "Moderate" if c_score > 60 or p_score > 60 else "Weak"
+    return min(c_score, 100), min(p_score, 100), status
 
-    status = "Weak"
-    if call_pct >= 80 or put_pct >= 80: 
-        status = "Strong"
-    elif call_pct >= 60 or put_pct >= 60: 
-        status = "Moderate"
-    
-    return min(call_pct, 100), min(put_pct, 100), status
-
-# --- MARKET HOURS LOGIC ---
 def get_market_status():
     tz = pytz.timezone('US/Eastern')
     now = datetime.now(tz)
-    if now.weekday() >= 5: 
-        return False, "Closed (Weekend)"
-    
-    market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-    market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-    
-    if market_open <= now <= market_close:
-        return True, "Open"
-    return False, "Closed (Market Hours: 9:30-16:00 ET)"
+    if now.weekday() >= 5: return False, "CLOSED"
+    m_open = now.replace(hour=9, minute=30, second=0)
+    m_close = now.replace(hour=16, minute=0, second=0)
+    return (m_open <= now <= m_close), "OPEN" if (m_open <= now <= m_close) else "CLOSED"
 
 # --- APP UI ---
 def main():
-    # Sidebar: Watchlist Management
-    st.sidebar.title("📁 Watchlist")
+    # Sidebar Watchlist
+    st.sidebar.markdown("<h2 style='color:#f8fafc; font-size:1.2rem; margin-bottom:20px;'>📁 WATCHLIST</h2>", unsafe_allow_html=True)
     if 'watchlist' not in st.session_state:
-        st.session_state.watchlist = ["AAPL", "TSLA", "SPY", "NFLX", "AMZN", "GOOGL", "IWM"]
+        st.session_state.watchlist = ["AAPL", "TSLA", "SPY", "NFLX", "AMZN", "GOOGL"]
     
-    new_ticker = st.sidebar.text_input("Add Symbol").upper().strip()
-    if st.sidebar.button("Add Ticker"):
-        if new_ticker and new_ticker not in st.session_state.watchlist:
-            st.session_state.watchlist.append(new_ticker)
+    new_t = st.sidebar.text_input("ADD SYMBOL", placeholder="e.g. NVDA").upper().strip()
+    if st.sidebar.button("ADD TO LIST", use_container_width=True):
+        if new_t and new_t not in st.session_state.watchlist:
+            st.session_state.watchlist.append(new_t)
             st.rerun()
             
-    selected_ticker = st.sidebar.selectbox("Active Analysis", st.session_state.watchlist)
+    selected_ticker = st.sidebar.selectbox("ACTIVE TERMINAL", st.session_state.watchlist)
     
-    if st.sidebar.button("Remove Selected"):
-        if len(st.session_state.watchlist) > 1:
-            st.session_state.watchlist.remove(selected_ticker)
-            st.rerun()
-
-    # Header
+    # Header logic
     isOpen, status_str = get_market_status()
-    col_h1, col_h2 = st.columns([3, 1])
-    with col_h1:
-        st.title(f"🚀 Analysis: {selected_ticker}")
-    with col_h2:
-        st.write(f"**Market Status:** {status_str}")
-
-    # Data Loading
-    df = get_history_data(selected_ticker)
-    options_info = get_options_data(selected_ticker)
+    badge_class = "badge-open" if isOpen else "badge-closed"
     
-    if df is not None and not df.empty:
-        df = calculate_technical_indicators(df)
-        
-        # Top Metrics
-        c1, c2, c3, c4 = st.columns(4)
-        call_s, put_s, strength = generate_signals(df, options_info)
-        
-        current_price = df['Close'].iloc[-1]
-        prev_price = df['Close'].iloc[-2] if len(df) > 1 else current_price
-        price_diff = current_price - prev_price
-        
-        c1.metric("Current Price", f"${current_price:.2f}", f"{price_diff:.2f}")
-        c2.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}" if pd.notnull(df['RSI'].iloc[-1]) else "N/A")
-        c3.metric("Call Score", f"{call_s}%")
-        c4.metric("Put Score", f"{put_s}%")
+    st.markdown(f"""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="background-color: #3b82f6; width: 35px; height: 35px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: white;">O</div>
+                <h1 style="font-size: 1.5rem; font-weight: 800; margin: 0;">Optix <span style="color: #64748b; font-weight: 400; font-size: 0.9rem;">PRO TERMINAL</span></h1>
+            </div>
+            <div class="market-badge {badge_class}">● MARKET {status_str}</div>
+        </div>
+    """, unsafe_allow_html=True)
 
-        # Visual Signal Badge
-        if strength == "Strong":
-            color = "#238636" if call_s > put_s else "#da3633"
-            bias = "CALL (Bullish)" if call_s > put_s else "PUT (Bearish)"
-            st.markdown(f"<div style='background-color:{color}; padding:15px; border-radius:8px; text-align:center; color:white; font-weight:bold; margin-bottom: 20px;'>🔥 STRONG SIGNAL DETECTED: {bias}</div>", unsafe_allow_html=True)
-        
-        # Main Chart
-        st.subheader("Interactive Price History & Indicators")
-        fig = go.Figure()
-        fig.add_trace(go.Candlestick(
-            x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-            name="Candlesticks"
-        ))
-        
-        if 'SMA50' in df.columns:
-            fig.add_trace(go.Scatter(x=df.index, y=df['SMA50'], line=dict(color='#3b82f6', width=2), name="SMA 50"))
-        
-        if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
-            fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], line=dict(color='rgba(75, 85, 99, 0.3)', width=1, dash='dash'), name="BB Upper"))
-            fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], line=dict(color='rgba(75, 85, 99, 0.3)', width=1, dash='dash'), name="BB Lower", fill='tonexty', fillcolor='rgba(75, 85, 99, 0.1)'))
-        
-        fig.update_layout(
-            template="plotly_dark",
-            height=600,
-            xaxis_rangeslider_visible=False,
-            margin=dict(l=0, r=0, t=30, b=0),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    # Main Grid
+    col_left, col_right = st.columns([1, 3])
 
-        # Options Table
-        if options_info:
-            st.subheader(f"Flow: Top Volume Contracts ({options_info['expiry']})")
-            calls = options_info['calls'].sort_values('volume', ascending=False).head(8)
-            puts = options_info['puts'].sort_values('volume', ascending=False).head(8)
+    with col_left:
+        # Signal Engine Card
+        df = get_history_data(selected_ticker)
+        options = get_options_data(selected_ticker)
+        df = calculate_indicators(df)
+        c_score, p_score, strength = get_scores(df, options)
+        
+        st.markdown(f"""
+            <div class="optix-card">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <span style="font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px;">SIGNAL ENGINE</span>
+                    <span style="font-size: 10px; font-weight: 700; background: #1e293b; color: #3b82f6; padding: 2px 8px; border-radius: 4px;">{strength.upper()}</span>
+                </div>
+                <div class="signal-container">
+                    <div class="signal-bar-wrapper">
+                        <div class="signal-bar" style="height: {c_score}%; background: rgba(34, 197, 94, 0.3); border-top: 2px solid #22c55e;"></div>
+                        <div class="signal-label">CALL {c_score}%</div>
+                    </div>
+                    <div class="signal-bar-wrapper">
+                        <div class="signal-bar" style="height: {p_score}%; background: rgba(239, 68, 68, 0.3); border-top: 2px solid #ef4444;"></div>
+                        <div class="signal-label">PUT {p_score}%</div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Stats Card
+        if df is not None:
+            price = df['Close'].iloc[-1]
+            change = price - df['Close'].iloc[-2]
+            st.markdown('<div class="optix-card">', unsafe_allow_html=True)
+            st.metric(selected_ticker, f"${price:.2f}", f"{change:.2f}")
+            st.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_right:
+        # Chart Card
+        if df is not None:
+            st.markdown('<div class="optix-card" style="padding: 10px;">', unsafe_allow_html=True)
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(
+                x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
+                name="Price", increasing_line_color='#22c55e', decreasing_line_color='#ef4444'
+            ))
+            fig.add_trace(go.Scatter(x=df.index, y=df['SMA50'], line=dict(color='#3b82f6', width=1.5), name="SMA 50"))
+            fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], line=dict(color='rgba(148, 163, 184, 0.2)', width=1, dash='dot'), name="BB Upper"))
+            fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], line=dict(color='rgba(148, 163, 184, 0.2)', width=1, dash='dot'), name="BB Lower", fill='tonexty', fillcolor='rgba(148, 163, 184, 0.05)'))
             
-            tab1, tab2 = st.tabs(["📞 Calls", "📉 Puts"])
-            with tab1:
-                st.dataframe(calls[['strike', 'lastPrice', 'volume', 'openInterest', 'impliedVolatility']], use_container_width=True)
-            with tab2:
-                st.dataframe(puts[['strike', 'lastPrice', 'volume', 'openInterest', 'impliedVolatility']], use_container_width=True)
+            fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                height=450,
+                xaxis_rangeslider_visible=False,
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis=dict(showgrid=False, zeroline=False),
+                yaxis=dict(showgrid=True, gridcolor='rgba(51, 65, 85, 0.5)', zeroline=False, side='right')
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        # Signal Logging
-        st.sidebar.divider()
-        if st.sidebar.button("💾 Log Current Signal"):
-            log_entry = {
-                'Time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'Ticker': selected_ticker,
-                'Call_Score': call_s,
-                'Put_Score': put_s,
-                'Price': f"{current_price:.2f}",
-                'Strength': strength
-            }
-            log_df = pd.DataFrame([log_entry])
-            log_file = 'signals_log.csv'
-            if not os.path.isfile(log_file):
-                log_df.to_csv(log_file, index=False)
-            else:
-                log_df.to_csv(log_file, mode='a', header=False, index=False)
-            st.sidebar.success(f"Logged {selected_ticker} signal.")
-
-    else:
-        st.error(f"No data found for {selected_ticker}. This may be due to ticker availability or API limits.")
-        st.info("Try a major index like SPY or QQQ to verify your connection.")
+        # Options Table Card
+        if options:
+            st.markdown('<div class="optix-card">', unsafe_allow_html=True)
+            st.markdown(f"<span style='font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px; margin-bottom: 15px; display: block;'>OPTIONS FLOW: {options['expiry']}</span>", unsafe_allow_html=True)
+            t1, t2 = st.tabs(["CALLS", "PUTS"])
+            with t1:
+                st.dataframe(options['calls'].sort_values('volume', ascending=False).head(5)[['strike', 'lastPrice', 'volume', 'impliedVolatility']], use_container_width=True)
+            with t2:
+                st.dataframe(options['puts'].sort_values('volume', ascending=False).head(5)[['strike', 'lastPrice', 'volume', 'impliedVolatility']], use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()

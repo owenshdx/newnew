@@ -56,22 +56,17 @@ st.markdown("""
     }
 
     .optix-card {
-        background-color: rgba(30, 41, 59, 0.5);
+        background-color: rgba(30, 41, 59, 0.4);
         border: 1px solid rgba(51, 65, 85, 0.5);
         padding: 20px;
         border-radius: 12px;
         margin-bottom: 20px;
+        backdrop-filter: blur(8px);
     }
 
     [data-testid="stSidebar"] {
         background-color: #0d1117;
         border-right: 1px solid #1e293b;
-    }
-
-    [data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        font-weight: 700 !important;
-        color: #f8fafc !important;
     }
 
     .signal-container {
@@ -100,10 +95,9 @@ st.markdown("""
         margin-top: 8px;
     }
     
-    /* Factor Breakdown Styling */
     .breakdown-section {
         margin-top: 25px;
-        border-top: 1px solid rgba(51, 65, 85, 0.5);
+        border-top: 1px solid rgba(51, 65, 85, 0.3);
         padding-top: 15px;
     }
     .breakdown-header {
@@ -120,7 +114,7 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 8px 0;
-        border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+        border-bottom: 1px solid rgba(51, 65, 85, 0.2);
     }
     .breakdown-label {
         font-size: 11px;
@@ -132,7 +126,6 @@ st.markdown("""
         padding: 3px 8px;
         border-radius: 4px;
         text-transform: uppercase;
-        letter-spacing: 0.2px;
     }
     .val-bullish { background: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.2); }
     .val-bearish { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
@@ -149,18 +142,6 @@ st.markdown("""
     .badge-open { background-color: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.2); }
     .badge-closed { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
     
-    .mock-banner-v2 {
-        background: linear-gradient(90deg, #d97706 0%, #b45309 100%);
-        color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
-        margin-bottom: 24px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -191,12 +172,17 @@ def get_history_data(symbol, period="5d", interval="1m"):
     except Exception as e:
         st.session_state.is_mock = True
         st.session_state.last_error = str(e)
-        # Mock logic...
         np.random.seed(abs(hash(symbol)) % 10000)
         base = 150.0
         dates = pd.date_range(end=datetime.now(), periods=100, freq='15min')
         prices = base + np.cumsum(np.random.normal(0, 1, 100))
-        return pd.DataFrame({'Open': prices-0.5, 'High': prices+1, 'Low': prices-1, 'Close': prices, 'Volume': np.random.randint(10k, 1M, 100)}, index=dates)
+        return pd.DataFrame({
+            'Open': prices-0.5, 
+            'High': prices+1.0, 
+            'Low': prices-1.0, 
+            'Close': prices, 
+            'Volume': np.random.randint(10000, 1000000, 100)
+        }, index=dates)
 
 @st.cache_data(ttl=300)
 def get_options_data(symbol):
@@ -206,7 +192,6 @@ def get_options_data(symbol):
         chain = ticker.option_chain(expiry)
         return {'calls': chain.calls, 'puts': chain.puts, 'expiry': expiry}
     except:
-        # Mock logic
         strikes = [150 + i for i in range(-5, 6)]
         def create_mock_chain():
             return pd.DataFrame({'strike': strikes, 'lastPrice': np.random.uniform(1, 5, 11), 'volume': np.random.randint(10, 5000, 11), 'openInterest': np.random.randint(100, 10000, 11), 'impliedVolatility': np.random.uniform(0.2, 0.8, 11)})
@@ -242,18 +227,15 @@ def calculate_indicators(df):
     return df
 
 def get_scores(df, options, earnings_days, symbol):
-    # market hours freeze logic
     is_open, _ = get_market_status()
     if not is_open and symbol in st.session_state.frozen_signals:
         return st.session_state.frozen_signals[symbol]
-
     if df is None or len(df) < 2: return 0, 0, "Wait", {}
     
     latest = df.iloc[-1]
     b = {'trend': 'Neutral', 'rsi': 'Neutral', 'macd': 'Neutral', 'volume': 'Neutral', 'iv': 'Normal / Baseline', 'earningsDesc': 'Safe'}
     c_score, p_score = 30, 30 
     
-    # Logic matches requirements...
     sma50 = latest.get('SMA50', latest['Close'])
     if latest['Close'] > (sma50 * 1.005): 
         c_score += 15
@@ -332,7 +314,6 @@ def main():
     c_s, p_s, strength, b = get_scores(df, opts, ed, selected_ticker)
 
     with col_left:
-        # Robust Sentiment Mapper
         def get_cls(val):
             v = str(val).lower()
             if any(x in v for x in ['+15c', '+20c', 'bullish', 'oversold', 'call heavy', 'low iv']): return 'val-bullish'
@@ -340,7 +321,6 @@ def main():
             if any(x in v for x in ['pnlty', 'penalty', 'critical', 'approaching']): return 'val-warning'
             return 'val-neutral'
 
-        # Signal Engine Card with consolidated HTML for better rendering
         st.markdown(f"""
             <div class="optix-card">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
@@ -360,30 +340,12 @@ def main():
                 
                 <div class="breakdown-section">
                     <span class="breakdown-header">Factor Breakdown</span>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Trend (MA50)</span>
-                        <span class="breakdown-value {get_cls(b['trend'])}">{b['trend']}</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">RSI Trend</span>
-                        <span class="breakdown-value {get_cls(b['rsi'])}">{b['rsi']}</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">MACD Momentum</span>
-                        <span class="breakdown-value {get_cls(b['macd'])}">{b['macd']}</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Option Flow</span>
-                        <span class="breakdown-value {get_cls(b['volume'])}">{b['volume']}</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Earnings Prox</span>
-                        <span class="breakdown-value {get_cls(b['earningsDesc'])}">{b['earningsDesc']}</span>
-                    </div>
-                    <div class="breakdown-item" style="border-bottom: none;">
-                        <span class="breakdown-label">IV Regime</span>
-                        <span class="breakdown-value {get_cls(b['iv'])}">{b['iv']}</span>
-                    </div>
+                    <div class="breakdown-item"><span class="breakdown-label">Trend (MA50)</span><span class="breakdown-value {get_cls(b['trend'])}">{b['trend']}</span></div>
+                    <div class="breakdown-item"><span class="breakdown-label">RSI Trend</span><span class="breakdown-value {get_cls(b['rsi'])}">{b['rsi']}</span></div>
+                    <div class="breakdown-item"><span class="breakdown-label">MACD Momentum</span><span class="breakdown-value {get_cls(b['macd'])}">{b['macd']}</span></div>
+                    <div class="breakdown-item"><span class="breakdown-label">Option Flow</span><span class="breakdown-value {get_cls(b['volume'])}">{b['volume']}</span></div>
+                    <div class="breakdown-item"><span class="breakdown-label">Earnings Prox</span><span class="breakdown-value {get_cls(b['earningsDesc'])}">{b['earningsDesc']}</span></div>
+                    <div class="breakdown-item" style="border-bottom: none;"><span class="breakdown-label">IV Regime</span><span class="breakdown-value {get_cls(b['iv'])}">{b['iv']}</span></div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -395,9 +357,38 @@ def main():
     with col_right:
         if df is not None:
             st.markdown('<div class="optix-card" style="padding: 10px;">', unsafe_allow_html=True)
-            fig = go.Figure(data=[go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name="Price", increasing_line_color='#22c55e', decreasing_line_color='#ef4444')])
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=450, xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig, use_container_width=True)
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df.index, y=df['Close'],
+                mode='lines',
+                line=dict(color='#3b82f6', width=3),
+                fill='tozeroy',
+                fillcolor='rgba(59, 130, 246, 0.1)',
+                name="Price",
+                hovertemplate="<b>Price:</b> $%{y:.2f}<extra></extra>"
+            ))
+            fig.add_trace(go.Scatter(
+                x=df.index, y=df['SMA50'],
+                mode='lines',
+                line=dict(color='rgba(255, 255, 255, 0.2)', width=1.5, dash='dot'),
+                name="SMA 50",
+                hoverinfo='skip'
+            ))
+            
+            fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                height=450,
+                xaxis_rangeslider_visible=False,
+                margin=dict(l=10, r=10, t=20, b=20),
+                xaxis=dict(showgrid=False, zeroline=False, tickfont=dict(size=10, color='#64748b')),
+                yaxis=dict(showgrid=True, gridcolor='rgba(51, 65, 85, 0.3)', zeroline=False, side='right', tickfont=dict(size=10, color='#64748b')),
+                showlegend=False,
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
         if opts:

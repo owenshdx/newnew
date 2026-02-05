@@ -4,6 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from datetime import datetime
 import pytz
 import os
@@ -25,7 +26,7 @@ if 'last_error' not in st.session_state:
 if 'frozen_signals' not in st.session_state:
     st.session_state.frozen_signals = {}
 
-# --- THEME INJECTION (MATCHING REACT PREVIEW) ---
+# --- THEME INJECTION (EXACT REACT PREVIEW REPLICATION) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
@@ -40,7 +41,7 @@ st.markdown("""
         background-color: #020617;
     }
 
-    /* Card Styling to match React 'bg-slate-900/40 backdrop-blur-md' */
+    /* Professional Terminal Card Styling */
     .optix-card {
         background-color: rgba(15, 23, 42, 0.4);
         border: 1px solid rgba(30, 41, 59, 0.7);
@@ -48,7 +49,7 @@ st.markdown("""
         border-radius: 14px;
         margin-bottom: 20px;
         backdrop-filter: blur(12px);
-        box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
     }
 
     [data-testid="stSidebar"] {
@@ -56,20 +57,21 @@ st.markdown("""
         border-right: 1px solid #1e293b;
     }
 
-    /* Signal Engine Specifics */
+    /* Signal Visuals */
     .signal-container {
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
         height: 80px;
         gap: 16px;
-        margin: 20px 0 30px 0;
+        margin: 25px 0 35px 0;
     }
     .signal-bar-wrapper {
         flex: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
+        position: relative;
     }
     .signal-bar {
         width: 100%;
@@ -79,25 +81,26 @@ st.markdown("""
     }
     .signal-bar-value {
         position: absolute;
-        top: -20px;
+        top: -24px;
         left: 50%;
         transform: translateX(-50%);
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 900;
+        letter-spacing: -0.5px;
     }
     .signal-label {
         font-size: 9px;
-        font-weight: 800;
-        color: #64748b;
-        margin-top: 10px;
-        letter-spacing: -0.2px;
+        font-weight: 900;
+        color: #475569;
+        margin-top: 12px;
+        letter-spacing: 0.5px;
     }
     
     /* Factor Breakdown Row Styling */
     .breakdown-section {
         margin-top: 25px;
-        border-top: 1px solid rgba(30, 41, 59, 0.5);
-        padding-top: 18px;
+        border-top: 1px solid rgba(30, 41, 59, 0.8);
+        padding-top: 20px;
     }
     .breakdown-header {
         font-size: 9px;
@@ -106,13 +109,13 @@ st.markdown("""
         letter-spacing: 1.5px;
         text-transform: uppercase;
         display: block;
-        margin-bottom: 12px;
+        margin-bottom: 14px;
     }
     .breakdown-item {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 10px 0;
+        padding: 12px 0;
         border-bottom: 1px solid rgba(30, 41, 59, 0.4);
     }
     .breakdown-label {
@@ -138,7 +141,7 @@ st.markdown("""
     /* Mini-Calendar Component */
     .mini-calendar {
         background: #020617;
-        border: 1px solid #1e293b;
+        border: 1px solid #334155;
         border-radius: 6px;
         width: 32px;
         height: 32px;
@@ -148,12 +151,12 @@ st.markdown("""
         justify-content: center;
         line-height: 1;
         overflow: hidden;
-        box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
+        box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
     }
     .mini-calendar-header {
         font-size: 5px;
         text-transform: uppercase;
-        background: rgba(239, 68, 68, 0.8);
+        background: rgba(239, 68, 68, 0.9);
         color: white;
         font-weight: 900;
         width: 100%;
@@ -172,8 +175,8 @@ st.markdown("""
     /* Cognitive Layer Section */
     .cognitive-layer {
         margin-top: 24px;
-        padding-top: 16px;
-        border-top: 1px solid rgba(30, 41, 59, 0.6);
+        padding-top: 20px;
+        border-top: 1px solid rgba(30, 41, 59, 0.8);
     }
     .cognitive-header {
         font-size: 10px;
@@ -181,34 +184,33 @@ st.markdown("""
         color: #3b82f6;
         display: flex;
         align-items: center;
-        gap: 6px;
-        margin-bottom: 8px;
+        gap: 8px;
+        margin-bottom: 10px;
+        letter-spacing: 0.5px;
     }
     .cognitive-text {
         font-size: 11px;
         color: #94a3b8;
         font-style: italic;
-        line-height: 1.5;
+        line-height: 1.6;
     }
 
     .market-badge {
         font-size: 10px;
-        font-weight: 700;
-        padding: 4px 12px;
+        font-weight: 800;
+        padding: 5px 14px;
         border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
-    .badge-open { background-color: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.2); }
-    .badge-closed { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+    .badge-open { background-color: rgba(34, 197, 94, 0.1); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-closed { background-color: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
     
-    /* Header Bar */
-    .terminal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 0;
-        margin-bottom: 24px;
-        border-bottom: 1px solid rgba(30, 41, 59, 0.5);
-    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0); }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -226,7 +228,7 @@ def get_market_status():
     m_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
     if m_open <= now <= m_close:
         return True, "OPEN"
-    return False, "CLOSED (After Hours)"
+    return False, f"CLOSED ({'After Hours' if now > m_close else 'Pre-Market'})"
 
 # --- DATA ENGINE ---
 @st.cache_data(ttl=60)
@@ -235,16 +237,14 @@ def get_history_data(symbol, period="5d", interval="1m"):
         ticker = yf.Ticker(symbol)
         df = ticker.history(period=period, interval=interval)
         if df is None or df.empty: raise ValueError("Empty response")
-        st.session_state.is_mock = False
         return df
-    except Exception as e:
-        st.session_state.is_mock = True
+    except Exception:
         np.random.seed(abs(hash(symbol)) % 10000)
-        base = 150.0
+        base = 150.0 if symbol != 'SPY' else 500.0
         dates = pd.date_range(end=datetime.now(), periods=100, freq='15min')
-        prices = base + np.cumsum(np.random.normal(0, 1, 100))
+        prices = base + np.cumsum(np.random.normal(0, 0.5, 100))
         return pd.DataFrame({
-            'Open': prices-0.5, 'High': prices+1.0, 'Low': prices-1.0, 
+            'Open': prices-0.3, 'High': prices+0.6, 'Low': prices-0.6, 
             'Close': prices, 'Volume': np.random.randint(10000, 1000000, 100)
         }, index=dates)
 
@@ -257,9 +257,8 @@ def get_options_data(symbol):
         return {'calls': chain.calls, 'puts': chain.puts, 'expiry': expiry}
     except:
         strikes = [150 + i for i in range(-5, 6)]
-        def create_mock_chain():
-            return pd.DataFrame({'strike': strikes, 'lastPrice': np.random.uniform(1, 5, 11), 'volume': np.random.randint(10, 5000, 11), 'openInterest': np.random.randint(100, 10000, 11), 'impliedVolatility': np.random.uniform(0.2, 0.8, 11)})
-        return {'calls': create_mock_chain(), 'puts': create_mock_chain(), 'expiry': 'MOCK'}
+        def mock_c(): return pd.DataFrame({'strike': strikes, 'lastPrice': np.random.uniform(1, 5, 11), 'volume': np.random.randint(10, 5000, 11), 'openInterest': np.random.randint(100, 10000, 11), 'impliedVolatility': np.random.uniform(0.2, 0.8, 11)})
+        return {'calls': mock_c(), 'puts': mock_c(), 'expiry': 'MOCK'}
 
 @st.cache_data(ttl=3600)
 def get_earnings_days(symbol):
@@ -296,25 +295,25 @@ def get_scores(df, options, earnings_days, symbol):
     if df is None or len(df) < 2: return 0, 0, "Wait", {}
     
     latest = df.iloc[-1]
-    b = {'trend': 'Neutral', 'rsi': 'Neutral', 'macd': 'Neutral', 'volume': 'Neutral', 'iv': 'Normal Regime', 'earningsDesc': 'Safe'}
+    b = {'trend': 'Neutral', 'rsi': 'Neutral', 'volume': 'Neutral', 'iv': 'Normal Regime', 'earningsDesc': 'Safe'}
     c_score, p_score = 35, 35 
     
     sma50 = latest.get('SMA50', latest['Close'])
-    if latest['Close'] > (sma50 * 1.005): 
+    if latest['Close'] > (sma50 * 1.002): 
         c_score += 15
         b['trend'] = "Above MA50 (+15c)"
-    elif latest['Close'] < (sma50 * 0.995): 
+    elif latest['Close'] < (sma50 * 0.998): 
         p_score += 15
         b['trend'] = "Below MA50 (+15p)"
     
     rsi = latest.get('RSI', 50)
-    if rsi < 38: 
+    if rsi < 35: 
         c_score += 20
         b['rsi'] = f"{int(rsi)} Oversold (+20c)"
-    elif rsi > 62: 
+    elif rsi > 65: 
         p_score += 20
         b['rsi'] = f"{int(rsi)} Overbought (+20p)"
-    else: b['rsi'] = f"{int(rsi)} Neutral"
+    else: b['rsi'] = f"{int(rsi)} Neutral ({int(rsi)})"
 
     if options:
         c_v, p_v = options['calls']['volume'].sum(), options['puts']['volume'].sum()
@@ -334,23 +333,30 @@ def get_scores(df, options, earnings_days, symbol):
     else: b['earningsDesc'] = f"Safe ({earnings_days}d)"
 
     c_s, p_s = max(0, min(100, c_score)), max(0, min(100, p_score))
-    strength = "Strong" if c_s >= 80 or p_s >= 80 else "Moderate" if c_s >= 65 or p_s >= 65 else "Weak"
+    strength = "Strong" if c_s >= 80 or p_s >= 80 else "Moderate" if c_s >= 60 or p_s >= 60 else "Weak"
     res = (int(c_s), int(p_s), strength, b)
     if is_open: st.session_state.frozen_signals[symbol] = res
     return res
 
 # --- APP UI ---
 def main():
-    st.sidebar.markdown("<h3 style='color:#64748b; font-size:0.8rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin-bottom:15px;'>Watchlist</h3>", unsafe_allow_html=True)
-    if 'watchlist' not in st.session_state: st.session_state.watchlist = ["AAPL", "TSLA", "SPY", "NFLX", "AMZN", "GOOGL"]
-    selected_ticker = st.sidebar.selectbox("ACTIVE TERMINAL", st.session_state.watchlist)
+    # Sidebar
+    st.sidebar.markdown("""
+        <div style="padding: 10px 0;">
+            <div style="font-size: 8px; font-weight: 900; color: #475569; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px;">Market Directory</div>
+        </div>
+    """, unsafe_allow_html=True)
     
+    if 'watchlist' not in st.session_state: st.session_state.watchlist = ["AAPL", "TSLA", "SPY", "NFLX", "AMZN", "GOOGL"]
+    selected_ticker = st.sidebar.selectbox("ACTIVE TERMINAL", st.session_state.watchlist, index=0)
+    
+    # Header
     isOpen, status_str = get_market_status()
     st.markdown(f"""
-        <div class="terminal-header">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0 25px 0; border-bottom: 1px solid rgba(30, 41, 59, 0.6); margin-bottom: 25px;">
             <div style="display: flex; align-items: center; gap: 14px;">
-                <div style="background-color: #2563eb; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: white; font-size: 1.1rem;">O</div>
-                <h1 style="font-size: 1.3rem; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Optix <span style="color: #475569; font-weight: 500; font-size: 0.8rem; letter-spacing: 0.5px; margin-left: 8px;">PRO TERMINAL</span></h1>
+                <div style="background-color: #2563eb; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: white; font-size: 1.1rem; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">O</div>
+                <h1 style="font-size: 1.4rem; font-weight: 800; margin: 0; letter-spacing: -0.8px; color: #f1f5f9;">Optix <span style="color: #475569; font-weight: 600; font-size: 0.8rem; letter-spacing: 0.8px; margin-left: 10px; text-transform: uppercase;">PRO TERMINAL</span></h1>
             </div>
             <div class="market-badge {'badge-open' if isOpen else 'badge-closed'}">● {status_str}</div>
         </div>
@@ -371,30 +377,28 @@ def main():
             if any(x in v for x in ['pnlty', 'critical', 'approaching']): return 'val-warning'
             return 'val-neutral'
 
-        days_match = re.search(r'\((\d+)d\)', b['earningsDesc'])
-        days_val = days_match.group(1) if days_match else "?"
+        dm = re.search(r'\((\d+)d\)', b['earningsDesc'])
+        days_v = dm.group(1) if dm else "?"
 
         st.markdown(f"""
             <div class="optix-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div>
-                        <div style="font-size: 9px; font-weight: 800; color: #64748b; letter-spacing: 1.5px; text-transform: uppercase;">Signal Engine</div>
-                        <div style="font-size: 8px; color: #475569; font-weight: 500;">Weighted Analysis</div>
+                        <div style="font-size: 9px; font-weight: 900; color: #64748b; letter-spacing: 1.5px; text-transform: uppercase;">Signal Engine</div>
+                        <div style="font-size: 8px; color: #475569; font-weight: 600; margin-top: 2px;">WEIGHTED ANALYSIS</div>
                     </div>
-                    <span style="font-size: 10px; font-weight: 900; background: { '#1d4ed8' if strength == 'Strong' else '#1e293b' }; color: { '#fff' if strength == 'Strong' else '#94a3b8' }; padding: 3px 10px; border-radius: 20px;">{strength.upper()}</span>
+                    <span style="font-size: 9px; font-weight: 900; background: { '#2563eb' if strength == 'Strong' else '#1e293b' }; color: { '#fff' if strength == 'Strong' else '#94a3b8' }; padding: 4px 12px; border-radius: 20px; box-shadow: { '0 4px 12px rgba(37, 99, 235, 0.25)' if strength == 'Strong' else 'none' };">{strength.upper()}</span>
                 </div>
                 
                 <div class="signal-container">
                     <div class="signal-bar-wrapper">
-                        <div class="signal-bar" style="height: {c_s}%; background: rgba(34, 197, 94, 0.15); border-top: 2px solid #22c55e;">
-                            <span class="signal-bar-value" style="color:#22c55e;">{c_s}%</span>
-                        </div>
+                        <span class="signal-bar-value" style="color:#4ade80;">{c_s}%</span>
+                        <div class="signal-bar" style="height: {c_s}%; background: rgba(34, 197, 94, 0.15); border-top: 2.5px solid #22c55e;"></div>
                         <div class="signal-label">CALL BIAS</div>
                     </div>
                     <div class="signal-bar-wrapper">
-                        <div class="signal-bar" style="height: {p_s}%; background: rgba(239, 68, 68, 0.15); border-top: 2px solid #ef4444;">
-                            <span class="signal-bar-value" style="color:#ef4444;">{p_s}%</span>
-                        </div>
+                        <span class="signal-bar-value" style="color:#f87171;">{p_s}%</span>
+                        <div class="signal-bar" style="height: {p_s}%; background: rgba(239, 68, 68, 0.15); border-top: 2.5px solid #ef4444;"></div>
                         <div class="signal-label">PUT BIAS</div>
                     </div>
                 </div>
@@ -402,26 +406,25 @@ def main():
                 <div class="breakdown-section">
                     <span class="breakdown-header">Factor Observation</span>
                     <div class="breakdown-item"><span class="breakdown-label">Trend (MA50)</span><span class="breakdown-value {get_cls(b['trend'])}">{b['trend']}</span></div>
-                    <div class="breakdown-item"><span class="breakdown-label">RSI Trend</span><span class="breakdown-value {get_cls(b['rsi'])}">{b['rsi']}</span></div>
+                    <div class="breakdown-item"><span class="breakdown-label">RSI Strategy</span><span class="breakdown-value {get_cls(b['rsi'])}">{b['rsi']}</span></div>
                     <div class="breakdown-item"><span class="breakdown-label">Option Flow</span><span class="breakdown-value {get_cls(b['volume'])}">{b['volume']}</span></div>
                     
                     <div class="breakdown-item">
                         <span class="breakdown-label">Earnings Prox</span>
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="mini-calendar">
                                 <span class="mini-calendar-header">Days</span>
-                                <span class="mini-calendar-body">{days_val}</span>
+                                <span class="mini-calendar-body">{days_v}</span>
                             </div>
                             <span class="breakdown-value {get_cls(b['earningsDesc'])}">{b['earningsDesc']}</span>
                         </div>
                     </div>
-                    
                     <div class="breakdown-item" style="border-bottom: none;"><span class="breakdown-label">IV Regime</span><span class="breakdown-value {get_cls(b['iv'])}">{b['iv']}</span></div>
                 </div>
 
                 <div class="cognitive-layer">
                     <div class="cognitive-header"><i class="fas fa-brain"></i> COGNITIVE LAYER</div>
-                    <p class="cognitive-text">Market sentiment for {selected_ticker} is currently showing {strength.lower()} conviction based on technical alignment and option flow delta. Maintain caution near key MA levels.</p>
+                    <p class="cognitive-text">Analysis of {selected_ticker} indicates {strength.lower()} conviction. Delta flow is currently aligned with technical pivot points. Monitor RSI for momentum cooling.</p>
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -429,56 +432,74 @@ def main():
         if df is not None:
             price = df['Close'].iloc[-1]
             st.markdown(f"""
-                <div class="optix-card" style="padding: 16px;">
-                    <div style="font-size: 0.7rem; font-weight: 700; color: #64748b; margin-bottom: 5px; letter-spacing: 1px;">{selected_ticker} CURRENT</div>
-                    <div style="font-size: 1.6rem; font-weight: 800; color: #f8fafc; letter-spacing: -1px;">${price:.2f}</div>
+                <div class="optix-card" style="padding: 18px;">
+                    <div style="font-size: 0.7rem; font-weight: 800; color: #64748b; margin-bottom: 6px; letter-spacing: 1.2px; text-transform: uppercase;">{selected_ticker} Spot</div>
+                    <div style="font-size: 1.8rem; font-weight: 900; color: #f1f5f9; letter-spacing: -1.2px;">${price:.2f}</div>
                 </div>
             """, unsafe_allow_html=True)
 
     with col_right:
         if df is not None:
-            st.markdown('<div class="optix-card" style="padding: 12px; height: 500px;">', unsafe_allow_html=True)
+            # PROFESSIONAL CANDLESTICK CHART WITH RSI SUBPLOT
+            fig = make_subplots(
+                rows=2, cols=1, 
+                shared_xaxes=True, 
+                vertical_spacing=0.08, 
+                row_heights=[0.7, 0.3]
+            )
             
-            fig = go.Figure()
-            # Gradient fill mimicry
-            fig.add_trace(go.Scatter(
-                x=df.index, y=df['Close'],
-                mode='lines',
-                line=dict(color='#3b82f6', width=3),
-                fill='tozeroy',
-                fillcolor='rgba(59, 130, 246, 0.08)',
-                name="Price",
-                hovertemplate="<b>Price:</b> $%{y:.2f}<extra></extra>"
-            ))
-            # Subtle MA
+            # Row 1: Candlestick + SMA50
+            fig.add_trace(go.Candlestick(
+                x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
+                name="Market Data",
+                increasing_line_color='#22c55e', decreasing_line_color='#ef4444',
+                increasing_fillcolor='#22c55e', decreasing_fillcolor='#ef4444',
+                opacity=0.9
+            ), row=1, col=1)
+            
             fig.add_trace(go.Scatter(
                 x=df.index, y=df['SMA50'],
-                mode='lines',
-                line=dict(color='rgba(148, 163, 184, 0.3)', width=1.5, dash='dot'),
-                name="SMA 50",
-                hoverinfo='skip'
-            ))
+                mode='lines', line=dict(color='#fbbf24', width=2),
+                name="SMA 50", hoverinfo='skip'
+            ), row=1, col=1)
             
+            # Row 2: RSI
+            fig.add_trace(go.Scatter(
+                x=df.index, y=df['RSI'],
+                mode='lines', line=dict(color='#3b82f6', width=1.5),
+                name="RSI (14)"
+            ), row=2, col=1)
+            
+            # RSI Thresholds
+            fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=2, col=1)
+            fig.add_hline(y=30, line_dash="dash", line_color="rgba(34, 197, 94, 0.4)", row=2, col=1)
+
             fig.update_layout(
                 template="plotly_dark",
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
-                height=460,
+                height=520,
                 xaxis_rangeslider_visible=False,
-                margin=dict(l=10, r=30, t=10, b=10),
-                xaxis=dict(showgrid=False, zeroline=False, tickfont=dict(size=9, color='#475569')),
-                yaxis=dict(showgrid=True, gridcolor='rgba(30, 41, 59, 0.5)', zeroline=False, side='right', tickfont=dict(size=10, color='#64748b')),
+                margin=dict(l=0, r=40, t=10, b=10),
                 showlegend=False,
-                hovermode='x unified'
+                hovermode='x unified',
+                font=dict(family="Inter", size=10)
             )
+            
+            fig.update_xaxes(showgrid=False, zeroline=False, tickfont=dict(color='#475569'), showticklabels=True, row=2, col=1)
+            fig.update_yaxes(showgrid=True, gridcolor='rgba(30, 41, 59, 0.5)', zeroline=False, side='right', tickfont=dict(color='#64748b'), row=1, col=1)
+            fig.update_yaxes(showgrid=True, gridcolor='rgba(30, 41, 59, 0.5)', zeroline=False, side='right', tickfont=dict(color='#64748b'), range=[0, 100], row=2, col=1)
+
+            st.markdown('<div class="optix-card" style="padding: 12px; height: 550px;">', unsafe_allow_html=True)
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
         if opts:
-            st.markdown('<div class="optix-card" style="padding: 0; overflow: hidden;">', unsafe_allow_html=True)
-            t1, t2 = st.tabs(["CALLS (FLOW)", "PUTS (FLOW)"])
-            with t1: st.dataframe(opts['calls'][['strike', 'lastPrice', 'volume', 'openInterest', 'impliedVolatility']].head(12), use_container_width=True)
-            with t2: st.dataframe(opts['puts'][['strike', 'lastPrice', 'volume', 'openInterest', 'impliedVolatility']].head(12), use_container_width=True)
+            st.markdown('<div class="optix-card" style="padding: 0; overflow: hidden; height: 380px;">', unsafe_allow_html=True)
+            t1, t2 = st.tabs(["CALL FLOW (Active)", "PUT FLOW (Active)"])
+            cols = ['strike', 'lastPrice', 'volume', 'openInterest', 'impliedVolatility']
+            with t1: st.dataframe(opts['calls'][cols].head(15), use_container_width=True)
+            with t2: st.dataframe(opts['puts'][cols].head(15), use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":

@@ -20,8 +20,18 @@ export class MarketDataService {
 
     const basePrice = symbol === 'SPY' ? 500 : Math.random() * 200 + 50;
     const change = (Math.random() - 0.4) * 5;
-    const callScore = Math.floor(Math.random() * 100);
-    const putScore = 100 - callScore;
+    
+    // Simulate Earnings Proximity
+    const earningsDays = Math.floor(Math.random() * 30);
+    const earningsPenalty = earningsDays <= 7 ? 15 : 0;
+    
+    // Base scores
+    let callScore = Math.floor(Math.random() * 60 + 20);
+    let putScore = Math.floor(Math.random() * 60 + 20);
+
+    // Apply Penalty
+    callScore = Math.max(0, callScore - earningsPenalty);
+    putScore = Math.max(0, putScore - earningsPenalty);
     
     const rsiVal = Math.floor(Math.random() * 80 + 10);
 
@@ -42,7 +52,8 @@ export class MarketDataService {
         rsiDesc: `${rsiVal} (${rsiVal < 35 ? 'Oversold +20c' : rsiVal > 65 ? 'Overbought +20p' : 'Neutral'})`,
         macdDesc: Math.random() > 0.5 ? 'Bullish Cross (+15c)' : 'Bearish Cross (+15p)',
         skewDesc: Math.random() > 0.6 ? 'Call Heavy (+15c)' : Math.random() > 0.3 ? 'Put Heavy (+15p)' : 'Balanced',
-        ivDesc: Math.random() > 0.7 ? 'High Vol' : 'Normal Regime'
+        ivDesc: Math.random() > 0.7 ? 'High Vol' : 'Normal Regime',
+        earningsDesc: earningsDays <= 7 ? `Close (${earningsDays}d) -15 Penalty` : `Safe (${earningsDays}d)`
       }
     };
   }

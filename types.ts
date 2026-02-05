@@ -44,6 +44,7 @@ export interface TickerSummary {
     macdDesc: string;
     skewDesc: string;
     ivDesc: string;
+    earningsDesc: string;
   };
 }
 

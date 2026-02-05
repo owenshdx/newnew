@@ -8,11 +8,12 @@ interface SignalProps {
   aiAnalysis: string;
 }
 
-const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' | 'bearish' | 'neutral' }> = ({ label, value, sentiment }) => {
+const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' | 'bearish' | 'neutral' | 'warning' }> = ({ label, value, sentiment }) => {
   const sentimentClasses = {
     bullish: 'bg-green-500/10 text-green-500',
     bearish: 'bg-red-500/10 text-red-500',
-    neutral: 'bg-slate-800 text-slate-400'
+    neutral: 'bg-slate-800 text-slate-400',
+    warning: 'bg-amber-500/10 text-amber-500'
   };
 
   return (
@@ -30,8 +31,9 @@ const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' 
 const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) => {
   if (!summary) return null;
 
-  const getSentiment = (val: string): 'bullish' | 'bearish' | 'neutral' => {
+  const getSentiment = (val: string): 'bullish' | 'bearish' | 'neutral' | 'warning' => {
     const lower = val.toLowerCase();
+    if (lower.includes('penalty')) return 'warning';
     if (lower.includes('bullish') || lower.includes('above') || lower.includes('oversold') || lower.includes('call')) return 'bullish';
     if (lower.includes('bearish') || lower.includes('below') || lower.includes('overbought') || lower.includes('put')) return 'bearish';
     return 'neutral';
@@ -92,7 +94,7 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
               sentiment={getSentiment(summary.scoreBreakdown.rsiDesc)}
             />
             <FactorRow 
-              label="MACD Analysis" 
+              label="MACD Momentum" 
               value={summary.scoreBreakdown.macdDesc} 
               sentiment={getSentiment(summary.scoreBreakdown.macdDesc)}
             />
@@ -100,6 +102,11 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
               label="Options Skew" 
               value={summary.scoreBreakdown.skewDesc} 
               sentiment={getSentiment(summary.scoreBreakdown.skewDesc)}
+            />
+            <FactorRow 
+              label="Earnings Prox" 
+              value={summary.scoreBreakdown.earningsDesc} 
+              sentiment={getSentiment(summary.scoreBreakdown.earningsDesc)}
             />
             <FactorRow 
               label="IV Regime" 

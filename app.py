@@ -3,7 +3,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import os
 
@@ -28,22 +28,45 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- DATA ENGINE ---
-@st.cache_data(ttl=60) # Refresh every minute
-def get_live_data(symbol, period="5d", interval="1m"):
-    """Fetches real-time intraday data from Yahoo Finance."""
+@st.cache_data(ttl=60)
+def get_history_data(symbol, period="5d", interval="1m"):
+    """Fetches real-time intraday price data from Yahoo Finance."""
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.history(period=period, interval=interval)
         if df.empty:
-            # Try daily if intraday fails (e.g., market data lag)
+            # Fallback to daily if intraday is unavailable (e.g. historical gaps)
             df = ticker.history(period="1mo", interval="1d")
-        return df, ticker
+        return df
     except Exception as e:
-        st.error(f"Data Fetch Error: {e}")
-        return None, None
+        return None
+
+@st.cache_data(ttl=300)
+def get_options_data(symbol):
+    """Fetches the nearest expiry options chain data."""
+    try:
+        ticker = yf.Ticker(symbol)
+        if not ticker.options:
+            return None
+        
+        # Get the nearest expiration date
+        expiry = ticker.options[0]
+        chain = ticker.option_chain(expiry)
+        
+        # Convert to serializable dict of dataframes
+        return {
+            'calls': chain.calls,
+            'puts': chain.puts,
+            'expiry': expiry
+        }
+    except Exception as e:
+        return None
 
 def calculate_technical_indicators(df):
     """Computes technical markers for the signal engine."""
+    if df is None or df.empty:
+        return df
+        
     # 50-period Moving Average
     df['SMA50'] = df['Close'].rolling(window=50).mean()
     
@@ -71,49 +94,71 @@ def calculate_technical_indicators(df):
 # --- SIGNAL ENGINE ---
 def generate_signals(df, options_data):
     """Computes a multi-factor score for trade bias."""
-    if df is None or len(df) < 50: return 0, 0, "Wait for data..."
+    if df is None or len(df) < 50: 
+        return 0, 0, "Wait for data..."
     
     latest = df.iloc[-1]
     call_score = 0
     put_score = 0
     
-    # 1. Price vs MA
-    if latest['Close'] > latest['SMA50']: call_score += 20
-    else: put_score += 20
+    # 1. Price vs MA (Trend Following)
+    if latest['Close'] > latest['SMA50']: 
+        call_score += 20
+    else: 
+        put_score += 20
     
-    # 2. RSI Trend
-    if latest['RSI'] < 35: call_score += 25 # Oversold
-    elif latest['RSI'] > 65: put_score += 25 # Overbought
+    # 2. RSI Trend (Mean Reversion)
+    if pd.notnull(latest['RSI']):
+        if latest['RSI'] < 35: 
+            call_score += 25 # Oversold
+        elif latest['RSI'] > 65: 
+            put_score += 25 # Overbought
     
-    # 3. MACD
-    if latest['MACD'] > latest['MACD_Signal']: call_score += 15
-    else: put_score += 15
+    # 3. MACD Momentum
+    if pd.notnull(latest['MACD']) and pd.notnull(latest['MACD_Signal']):
+        if latest['MACD'] > latest['MACD_Signal']: 
+            call_score += 15
+        else: 
+            put_score += 15
     
-    # 4. Options Volume (Simplified check if data exists)
+    # 4. Options Volume Skew
     if options_data is not None:
         call_vol = options_data['calls']['volume'].sum()
         put_vol = options_data['puts']['volume'].sum()
-        if call_vol > put_vol: call_score += 20
-        else: put_score += 20
-        
+        if call_vol > put_vol: 
+            call_score += 20
+        else: 
+            put_score += 20
+            
+    # Normalize scores
+    total = call_score + put_score
+    if total > 0:
+        call_pct = int((call_score / 80) * 100)
+        put_pct = int((put_score / 80) * 100)
+    else:
+        call_pct, put_pct = 0, 0
+
     status = "Weak"
-    if call_score >= 80 or put_score >= 80: status = "Strong"
-    elif call_score >= 60 or put_score >= 60: status = "Moderate"
+    if call_pct >= 80 or put_pct >= 80: 
+        status = "Strong"
+    elif call_pct >= 60 or put_pct >= 60: 
+        status = "Moderate"
     
-    return call_score, put_score, status
+    return min(call_pct, 100), min(put_pct, 100), status
 
 # --- MARKET HOURS LOGIC ---
 def get_market_status():
     tz = pytz.timezone('US/Eastern')
     now = datetime.now(tz)
-    if now.weekday() >= 5: return False, "Closed (Weekend)"
+    if now.weekday() >= 5: 
+        return False, "Closed (Weekend)"
     
     market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
     market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
     
     if market_open <= now <= market_close:
         return True, "Open"
-    return False, "Closed (After Hours)"
+    return False, "Closed (Market Hours: 9:30-16:00 ET)"
 
 # --- APP UI ---
 def main():
@@ -122,7 +167,7 @@ def main():
     if 'watchlist' not in st.session_state:
         st.session_state.watchlist = ["AAPL", "TSLA", "SPY", "NFLX", "AMZN", "GOOGL", "IWM"]
     
-    new_ticker = st.sidebar.text_input("Add Symbol").upper()
+    new_ticker = st.sidebar.text_input("Add Symbol").upper().strip()
     if st.sidebar.button("Add Ticker"):
         if new_ticker and new_ticker not in st.session_state.watchlist:
             st.session_state.watchlist.append(new_ticker)
@@ -131,8 +176,9 @@ def main():
     selected_ticker = st.sidebar.selectbox("Active Analysis", st.session_state.watchlist)
     
     if st.sidebar.button("Remove Selected"):
-        st.session_state.watchlist.remove(selected_ticker)
-        st.rerun()
+        if len(st.session_state.watchlist) > 1:
+            st.session_state.watchlist.remove(selected_ticker)
+            st.rerun()
 
     # Header
     isOpen, status_str = get_market_status()
@@ -143,26 +189,22 @@ def main():
         st.write(f"**Market Status:** {status_str}")
 
     # Data Loading
-    df, ticker_obj = get_live_data(selected_ticker)
+    df = get_history_data(selected_ticker)
+    options_info = get_options_data(selected_ticker)
     
-    if df is not None:
+    if df is not None and not df.empty:
         df = calculate_technical_indicators(df)
         
-        # Options Data Fetch
-        options_info = None
-        try:
-            exp = ticker_obj.options[0] # Nearest expiry
-            opt_chain = ticker_obj.option_chain(exp)
-            options_info = {'calls': opt_chain.calls, 'puts': opt_chain.puts}
-        except:
-            st.warning("Could not fetch options chain for this ticker.")
-
         # Top Metrics
         c1, c2, c3, c4 = st.columns(4)
         call_s, put_s, strength = generate_signals(df, options_info)
         
-        c1.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
-        c2.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}")
+        current_price = df['Close'].iloc[-1]
+        prev_price = df['Close'].iloc[-2] if len(df) > 1 else current_price
+        price_diff = current_price - prev_price
+        
+        c1.metric("Current Price", f"${current_price:.2f}", f"{price_diff:.2f}")
+        c2.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}" if pd.notnull(df['RSI'].iloc[-1]) else "N/A")
         c3.metric("Call Score", f"{call_s}%")
         c4.metric("Put Score", f"{put_s}%")
 
@@ -170,7 +212,7 @@ def main():
         if strength == "Strong":
             color = "#238636" if call_s > put_s else "#da3633"
             bias = "CALL (Bullish)" if call_s > put_s else "PUT (Bearish)"
-            st.markdown(f"<div style='background-color:{color}; padding:10px; border-radius:5px; text-align:center; color:white; font-weight:bold;'>🔥 STRONG SIGNAL DETECTED: {bias}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background-color:{color}; padding:15px; border-radius:8px; text-align:center; color:white; font-weight:bold; margin-bottom: 20px;'>🔥 STRONG SIGNAL DETECTED: {bias}</div>", unsafe_allow_html=True)
         
         # Main Chart
         st.subheader("Interactive Price History & Indicators")
@@ -179,23 +221,28 @@ def main():
             x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
             name="Candlesticks"
         ))
-        fig.add_trace(go.Scatter(x=df.index, y=df['SMA50'], line=dict(color='#3b82f6', width=2), name="SMA 50"))
-        fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], line=dict(color='#4b5563', width=1, dash='dash'), name="BB Upper"))
-        fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], line=dict(color='#4b5563', width=1, dash='dash'), name="BB Lower", fill='tonexty'))
+        
+        if 'SMA50' in df.columns:
+            fig.add_trace(go.Scatter(x=df.index, y=df['SMA50'], line=dict(color='#3b82f6', width=2), name="SMA 50"))
+        
+        if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
+            fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], line=dict(color='rgba(75, 85, 99, 0.3)', width=1, dash='dash'), name="BB Upper"))
+            fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], line=dict(color='rgba(75, 85, 99, 0.3)', width=1, dash='dash'), name="BB Lower", fill='tonexty', fillcolor='rgba(75, 85, 99, 0.1)'))
         
         fig.update_layout(
             template="plotly_dark",
             height=600,
             xaxis_rangeslider_visible=False,
-            margin=dict(l=0, r=0, t=30, b=0)
+            margin=dict(l=0, r=0, t=30, b=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         st.plotly_chart(fig, use_container_width=True)
 
         # Options Table
         if options_info:
-            st.subheader("Flow: Top Volume Contracts")
-            calls = options_info['calls'].sort_values('volume', ascending=False).head(5)
-            puts = options_info['puts'].sort_values('volume', ascending=False).head(5)
+            st.subheader(f"Flow: Top Volume Contracts ({options_info['expiry']})")
+            calls = options_info['calls'].sort_values('volume', ascending=False).head(8)
+            puts = options_info['puts'].sort_values('volume', ascending=False).head(8)
             
             tab1, tab2 = st.tabs(["📞 Calls", "📉 Puts"])
             with tab1:
@@ -206,21 +253,25 @@ def main():
         # Signal Logging
         st.sidebar.divider()
         if st.sidebar.button("💾 Log Current Signal"):
-            log_df = pd.DataFrame([{
-                'Time': datetime.now().strftime("%H:%M:%S"),
+            log_entry = {
+                'Time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'Ticker': selected_ticker,
                 'Call_Score': call_s,
                 'Put_Score': put_s,
-                'Price': df['Close'].iloc[-1]
-            }])
-            if not os.path.isfile('signals_log.csv'):
-                log_df.to_csv('signals_log.csv', index=False)
+                'Price': f"{current_price:.2f}",
+                'Strength': strength
+            }
+            log_df = pd.DataFrame([log_entry])
+            log_file = 'signals_log.csv'
+            if not os.path.isfile(log_file):
+                log_df.to_csv(log_file, index=False)
             else:
-                log_df.to_csv('signals_log.csv', mode='a', header=False, index=False)
-            st.sidebar.success("Logged to signals_log.csv")
+                log_df.to_csv(log_file, mode='a', header=False, index=False)
+            st.sidebar.success(f"Logged {selected_ticker} signal.")
 
     else:
-        st.error("Data failed to load. Please check the ticker symbol or your internet connection.")
+        st.error(f"No data found for {selected_ticker}. This may be due to ticker availability or API limits.")
+        st.info("Try a major index like SPY or QQQ to verify your connection.")
 
 if __name__ == "__main__":
     main()

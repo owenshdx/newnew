@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   ComposedChart, 
   Line, 
@@ -50,30 +50,78 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const VolumeProfile: React.FC<{ data: PricePoint[], minPrice: number, maxPrice: number }> = ({ data, minPrice, maxPrice }) => {
+  const bins = useMemo(() => {
+    if (!data.length) return [];
+    const numBins = 40;
+    const binSize = (maxPrice - minPrice) / numBins;
+    const profile = new Array(numBins).fill(0);
+    
+    data.forEach(p => {
+      const idx = Math.min(numBins - 1, Math.max(0, Math.floor((p.close - minPrice) / binSize)));
+      profile[idx] += p.volume;
+    });
+
+    const maxVol = Math.max(...profile);
+    return profile.map((vol, i) => ({
+      vol,
+      width: (vol / maxVol) * 100,
+      bottom: (i / numBins) * 100,
+      height: 100 / numBins
+    }));
+  }, [data, minPrice, maxPrice]);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none opacity-20 left-0 right-[45px]">
+      {bins.map((bin, i) => (
+        <div 
+          key={i}
+          style={{
+            position: 'absolute',
+            bottom: `${bin.bottom}%`,
+            left: 0,
+            height: `${bin.height}%`,
+            width: `${bin.width * 0.4}%`, // Max width 40% of chart
+            backgroundColor: '#3b82f6',
+            borderBottom: '1px solid rgba(15, 23, 42, 0.2)',
+            transition: 'width 0.3s ease'
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
 const TechnicalChart: React.FC<ChartProps> = ({ data }) => {
   if (!data || data.length === 0) return null;
 
-  const prices = data.map(d => d.close);
-  const minPrice = Math.min(...data.map(d => d.low)) * 0.999;
-  const maxPrice = Math.max(...data.map(d => d.high)) * 1.001;
+  const minPrice = useMemo(() => Math.min(...data.map(d => d.low)) * 0.999, [data]);
+  const maxPrice = useMemo(() => Math.max(...data.map(d => d.high)) * 1.001, [data]);
 
   // Prepare data for candles: Recharts Bar can take [low, high] as dataKey
-  const chartData = data.map(d => ({
+  const chartData = useMemo(() => data.map(d => ({
     ...d,
     candle: [d.open, d.close],
     wick: [d.low, d.high]
-  }));
+  })), [data]);
 
   return (
     <div className="w-full h-full flex flex-col gap-2">
       {/* Price + MA50 Pane */}
-      <div className="flex-[3] w-full min-h-[250px] relative">
+      <div className="flex-[3] w-full min-h-[250px] relative overflow-hidden">
         <div className="absolute top-2 left-4 z-10 flex gap-4 pointer-events-none">
            <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-amber-400"></div>
               <span className="text-[9px] font-black text-slate-500 uppercase">SMA 50</span>
            </div>
+           <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-blue-500 opacity-50"></div>
+              <span className="text-[9px] font-black text-slate-500 uppercase">Vol Profile</span>
+           </div>
         </div>
+
+        {/* Volume Profile Overlay */}
+        <VolumeProfile data={data} minPrice={minPrice} maxPrice={maxPrice} />
         
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="optix_sync">

@@ -38,12 +38,39 @@ const FactorRow: React.FC<{
   );
 };
 
-const MiniCalendar: React.FC<{ days: string }> = ({ days }) => (
-  <div className="bg-slate-950 border border-slate-700 rounded w-8 h-8 flex flex-col items-center justify-center shadow-inner overflow-hidden">
-    <div className="bg-red-500/90 w-full text-[5px] font-black text-white text-center py-[2px] uppercase tracking-tighter">Days</div>
-    <div className="text-[11px] font-bold text-slate-100 flex-1 flex items-center leading-none">{days}</div>
-  </div>
-);
+const EnhancedMiniCalendar: React.FC<{ days: string }> = ({ days }) => {
+  const dayNum = parseInt(days);
+  const isImminent = !isNaN(dayNum) && dayNum <= 7;
+  const isApproaching = !isNaN(dayNum) && dayNum <= 14;
+
+  return (
+    <div className={`relative flex flex-col items-center justify-center w-9 h-10 rounded-md border overflow-hidden transition-all duration-500 shadow-lg 
+      ${isImminent ? 'border-orange-500/50 shadow-orange-950/40 animate-pulse' : 'border-slate-700 shadow-black/40'} 
+      ${isApproaching ? 'bg-slate-900' : 'bg-slate-950'}`}>
+      
+      {/* Calendar Top Rings Decor */}
+      <div className="absolute top-[2px] left-1/2 -translate-x-1/2 flex gap-1 z-10">
+        <div className="w-[2px] h-[4px] bg-slate-600 rounded-full"></div>
+        <div className="w-[2px] h-[4px] bg-slate-600 rounded-full"></div>
+      </div>
+
+      <div className={`w-full text-[6px] font-black text-white text-center py-[2px] uppercase tracking-tighter border-b
+        ${isImminent ? 'bg-orange-600 border-orange-400/30' : 'bg-red-600 border-red-400/30'}`}>
+        {isImminent ? 'ALERT' : 'EST'}
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center leading-none">
+        <span className={`text-[12px] font-black tracking-tighter ${isImminent ? 'text-orange-400' : 'text-slate-100'}`}>
+          {isImminent || isApproaching ? `T-${days}` : days}
+        </span>
+        <span className="text-[5px] font-bold text-slate-500 uppercase tracking-widest mt-[1px]">DAYS</span>
+      </div>
+
+      {/* Glossy Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none"></div>
+    </div>
+  );
+};
 
 const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) => {
   const [strongBadgeStyle, setStrongBadgeStyle] = useState<BadgeStyle>('default');
@@ -156,7 +183,7 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
               label="Earnings Prox" 
               value={summary.scoreBreakdown.earningsDesc} 
               sentiment={getSentiment(summary.scoreBreakdown.earningsDesc)} 
-              extra={<MiniCalendar days={daysVal} />}
+              extra={<EnhancedMiniCalendar days={daysVal} />}
             />
             <FactorRow label="IV Regime" value={summary.scoreBreakdown.ivDesc} sentiment={getSentiment(summary.scoreBreakdown.ivDesc)} />
           </div>

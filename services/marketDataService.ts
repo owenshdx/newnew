@@ -21,13 +21,22 @@ export class MarketDataService {
     const basePrice = symbol === 'SPY' ? 500 : Math.random() * 200 + 50;
     const change = (Math.random() - 0.4) * 5;
     
-    // Simulate Earnings Proximity
-    const earningsDays = Math.floor(Math.random() * 30);
-    const earningsPenalty = earningsDays <= 7 ? 15 : 0;
+    // Simulate Earnings Proximity with tiered penalties
+    const earningsDays = Math.floor(Math.random() * 25);
+    let earningsPenalty = 0;
+    let earningsDesc = `Safe (${earningsDays}d)`;
+
+    if (earningsDays <= 7) {
+      earningsPenalty = 20;
+      earningsDesc = `CRITICAL (${earningsDays}d) -20 Pnlty`;
+    } else if (earningsDays <= 14) {
+      earningsPenalty = 10;
+      earningsDesc = `Approaching (${earningsDays}d) -10 Pnlty`;
+    }
     
     // Base scores
-    let callScore = Math.floor(Math.random() * 60 + 20);
-    let putScore = Math.floor(Math.random() * 60 + 20);
+    let callScore = Math.floor(Math.random() * 50 + 30);
+    let putScore = Math.floor(Math.random() * 50 + 30);
 
     // Apply Penalty
     callScore = Math.max(0, callScore - earningsPenalty);
@@ -53,7 +62,7 @@ export class MarketDataService {
         macdDesc: Math.random() > 0.5 ? 'Bullish Cross (+15c)' : 'Bearish Cross (+15p)',
         skewDesc: Math.random() > 0.6 ? 'Call Heavy (+15c)' : Math.random() > 0.3 ? 'Put Heavy (+15p)' : 'Balanced',
         ivDesc: Math.random() > 0.7 ? 'High Vol' : 'Normal Regime',
-        earningsDesc: earningsDays <= 7 ? `Close (${earningsDays}d) -15 Penalty` : `Safe (${earningsDays}d)`
+        earningsDesc: earningsDesc
       }
     };
   }

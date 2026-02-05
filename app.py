@@ -237,12 +237,20 @@ def get_options_data(symbol):
 def get_earnings_days(symbol):
     try:
         ticker = yf.Ticker(symbol)
-        calendar = ticker.calendar
-        if calendar is not None and not calendar.empty:
-            earning_date = calendar.iloc[0, 0]
-            if isinstance(earning_date, datetime):
-                days_to = (earning_date.date() - datetime.now().date()).days
-                return days_to
+        cal = ticker.calendar
+        if cal is not None:
+            if isinstance(cal, dict) and 'Earnings Date' in cal:
+                ed_list = cal['Earnings Date']
+                ed = ed_list[0] if ed_list else None
+            elif hasattr(cal, 'get') and cal.get('Earnings Date') is not None:
+                ed_list = cal.get('Earnings Date')
+                ed = ed_list.iloc[0] if not ed_list.empty else None
+            else:
+                ed = cal.iloc[0, 0]
+            
+            if ed and isinstance(ed, (datetime, pd.Timestamp)):
+                days_to = (ed.date() - datetime.now().date()).days
+                return days_to if days_to >= 0 else 99
         return 99
     except:
         return 99
@@ -289,12 +297,14 @@ def get_scores(df, options, earnings_days, symbol):
     
     # 1. Trend (Price vs SMA50) - 15 pts
     sma50 = latest.get('SMA50', latest['Close'])
-    if latest['Close'] > sma50: 
+    if latest['Close'] > (sma50 * 1.01): 
         c_score += 15
         breakdown['trend'] = f"Above MA50 (+15c)"
-    else: 
+    elif latest['Close'] < (sma50 * 0.99): 
         p_score += 15
         breakdown['trend'] = f"Below MA50 (+15p)"
+    else:
+        breakdown['trend'] = "Neutral / On MA50"
         
     # 2. RSI (Relative Strength) - 20 pts
     rsi = latest.get('RSI', 50)
@@ -331,7 +341,7 @@ def get_scores(df, options, earnings_days, symbol):
                 p_score += 15
                 breakdown['volume'] = f"Put Heavy (+15p)"
             else:
-                breakdown['volume'] = "Balanced"
+                breakdown['volume'] = "Balanced Flow"
             
     # 5. IV Regime - 10 pts
     if options:
@@ -345,26 +355,28 @@ def get_scores(df, options, earnings_days, symbol):
             p_score -= 5
             breakdown['iv'] = "High IV (Expensive/Risk)"
         else:
-            breakdown['iv'] = "Normal"
+            breakdown['iv'] = "Normal / Baseline"
 
-    # 6. Earnings Proximity Penalty
+    # 6. Earnings Proximity Penalty - High Impact
     if earnings_days <= 7:
-        penalty = 15
+        penalty = 20
         c_score -= penalty
         p_score -= penalty
-        breakdown['earningsDesc'] = f"Close ({earnings_days}d) -{penalty} Penalty"
+        breakdown['earningsDesc'] = f"CRITICAL ({earnings_days}d) -{penalty} Pnlty"
+    elif earnings_days <= 14:
+        penalty = 10
+        c_score -= penalty
+        p_score -= penalty
+        breakdown['earningsDesc'] = f"Approaching ({earnings_days}d) -{penalty} Pnlty"
     else:
         breakdown['earningsDesc'] = f"Safe ({earnings_days}d)"
 
     # Final Classification
     c_score = max(0, min(100, c_score))
     p_score = max(0, min(100, p_score))
-    
     strength = "Strong" if c_score >= 80 or p_score >= 80 else "Moderate" if c_score >= 60 or p_score >= 60 else "Weak"
-    
     result = (int(c_score), int(p_score), strength, breakdown)
     
-    # Store for freeze logic and log to CSV
     if is_open:
         st.session_state.frozen_signals[symbol] = result
         log_signal(symbol, c_score, p_score, strength)
@@ -398,7 +410,6 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
-    # Fallback Banner
     if st.session_state.is_mock:
         col_b1, col_b2 = st.columns([4, 1])
         with col_b1:
@@ -422,7 +433,21 @@ def main():
     c_score, p_score, strength, bdown = get_scores(df, options, earnings_days, selected_ticker)
 
     with col_left:
-        # Signal Engine Card
+        # Signal Engine Logic for UI
+        def get_sentiment_cls(txt):
+            txt = str(txt).lower()
+            if any(x in txt for x in ['+15c', '+20c', 'bullish', 'oversold', 'call heavy', 'low iv']): return 'val-bullish'
+            if any(x in txt for x in ['+15p', '+20p', 'bearish', 'overbought', 'put heavy', 'high iv']): return 'val-bearish'
+            if any(x in txt for x in ['pnlty', 'penalty', 'critical', 'approaching']): return 'val-warning'
+            return 'val-neutral'
+
+        t_cls = get_sentiment_cls(bdown.get('trend', ''))
+        r_cls = get_sentiment_cls(bdown.get('rsi', ''))
+        m_cls = get_sentiment_cls(bdown.get('macd', ''))
+        v_cls = get_sentiment_cls(bdown.get('volume', ''))
+        e_cls = get_sentiment_cls(bdown.get('earningsDesc', ''))
+        i_cls = get_sentiment_cls(bdown.get('iv', ''))
+
         st.markdown(f"""
             <div class="optix-card">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
@@ -444,27 +469,27 @@ def main():
                     <span style="font-size: 9px; font-weight: 700; color: #475569; letter-spacing: 1px; text-transform: uppercase;">Factor Breakdown</span>
                     <div class="breakdown-item">
                         <span class="breakdown-label">Trend (MA50)</span>
-                        <span class="breakdown-value {'val-bullish' if '+15c' in bdown.get('trend', '') else 'val-bearish'}">{bdown.get('trend', 'N/A')}</span>
+                        <span class="breakdown-value {t_cls}">{bdown.get('trend', 'N/A')}</span>
                     </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">RSI Trend</span>
-                        <span class="breakdown-value {'val-bullish' if '+20c' in bdown.get('rsi', '') else 'val-bearish' if '+20p' in bdown.get('rsi', '') else 'val-neutral'}">{bdown.get('rsi', 'N/A')}</span>
+                        <span class="breakdown-value {r_cls}">{bdown.get('rsi', 'N/A')}</span>
                     </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">MACD Momentum</span>
-                        <span class="breakdown-value {'val-bullish' if '+15c' in bdown.get('macd', '') else 'val-bearish'}">{bdown.get('macd', 'N/A')}</span>
+                        <span class="breakdown-value {m_cls}">{bdown.get('macd', 'N/A')}</span>
                     </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">Option Flow</span>
-                        <span class="breakdown-value {'val-bullish' if '+15c' in bdown.get('volume', '') else 'val-bearish' if '+15p' in bdown.get('volume', '') else 'val-neutral'}">{bdown.get('volume', 'N/A')}</span>
+                        <span class="breakdown-value {v_cls}">{bdown.get('volume', 'N/A')}</span>
                     </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">Earnings Prox</span>
-                        <span class="breakdown-value {'val-warning' if 'Penalty' in bdown.get('earningsDesc', '') else 'val-neutral'}">{bdown.get('earningsDesc', 'Safe')}</span>
+                        <span class="breakdown-value {e_cls}">{bdown.get('earningsDesc', 'Safe')}</span>
                     </div>
                     <div class="breakdown-item" style="border-bottom: none;">
                         <span class="breakdown-label">IV Regime</span>
-                        <span class="breakdown-value val-neutral">{bdown.get('iv', 'Normal')}</span>
+                        <span class="breakdown-value {i_cls}">{bdown.get('iv', 'Normal')}</span>
                     </div>
                 </div>
             </div>
@@ -477,7 +502,6 @@ def main():
             st.metric(selected_ticker, f"${price:.2f}", f"{change:.2f}")
             st.markdown('</div>', unsafe_allow_html=True)
             
-        # Log Review Section
         if os.path.exists(LOG_FILE):
             st.markdown('<div class="optix-card">', unsafe_allow_html=True)
             st.markdown("<span style='font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px;'>SIGNAL HISTORY</span>", unsafe_allow_html=True)
@@ -497,11 +521,9 @@ def main():
             fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], line=dict(color='rgba(148, 163, 184, 0.2)', width=1, dash='dot'), name="BB Upper"))
             fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], line=dict(color='rgba(148, 163, 184, 0.2)', width=1, dash='dot'), name="BB Lower", fill='tonexty', fillcolor='rgba(148, 163, 184, 0.05)'))
             
-            # Review past signals on chart
             if os.path.exists(LOG_FILE):
                 past_sigs = pd.read_csv(LOG_FILE)
                 past_sigs = past_sigs[past_sigs['symbol'] == selected_ticker]
-                # Filter signals to match current chart date range if possible
                 for i, row in past_sigs.tail(5).iterrows():
                     fig.add_annotation(
                         text=f"S:{row['strength'][:1]}",

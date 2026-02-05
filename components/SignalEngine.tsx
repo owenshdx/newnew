@@ -33,7 +33,8 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
 
   const getSentiment = (val: string): 'bullish' | 'bearish' | 'neutral' | 'warning' => {
     const lower = val.toLowerCase();
-    if (lower.includes('penalty')) return 'warning';
+    // Match 'pnlty' or 'penalty' for warnings
+    if (lower.includes('pnlty') || lower.includes('penalty') || lower.includes('critical')) return 'warning';
     if (lower.includes('bullish') || lower.includes('above') || lower.includes('oversold') || lower.includes('call')) return 'bullish';
     if (lower.includes('bearish') || lower.includes('below') || lower.includes('overbought') || lower.includes('put')) return 'bearish';
     return 'neutral';

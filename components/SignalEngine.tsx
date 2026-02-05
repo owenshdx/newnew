@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { TickerSummary } from '../types';
 
 interface SignalProps {
@@ -7,6 +7,8 @@ interface SignalProps {
   summary?: TickerSummary;
   aiAnalysis: string;
 }
+
+type BadgeStyle = 'default' | 'gold' | 'fire' | 'emerald';
 
 const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' | 'bearish' | 'neutral' | 'warning' }> = ({ label, value, sentiment }) => {
   const sentimentClasses = {
@@ -29,29 +31,86 @@ const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' 
 };
 
 const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) => {
+  const [strongBadgeStyle, setStrongBadgeStyle] = useState<BadgeStyle>('default');
+  const [isConfiguring, setIsConfiguring] = useState(false);
+
   if (!summary) return null;
 
   const getSentiment = (val: string): 'bullish' | 'bearish' | 'neutral' | 'warning' => {
     const lower = val.toLowerCase();
-    // Match 'pnlty' or 'penalty' for warnings
     if (lower.includes('pnlty') || lower.includes('penalty') || lower.includes('critical')) return 'warning';
     if (lower.includes('bullish') || lower.includes('above') || lower.includes('oversold') || lower.includes('call')) return 'bullish';
     if (lower.includes('bearish') || lower.includes('below') || lower.includes('overbought') || lower.includes('put')) return 'bearish';
     return 'neutral';
   };
 
+  const badgeThemes = {
+    default: {
+      className: 'bg-blue-600 text-white shadow-lg shadow-blue-900/40',
+      icon: 'fa-bolt'
+    },
+    gold: {
+      className: 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-900/40',
+      icon: 'fa-star'
+    },
+    fire: {
+      className: 'bg-orange-600 text-white shadow-lg shadow-orange-900/40',
+      icon: 'fa-fire'
+    },
+    emerald: {
+      className: 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40',
+      icon: 'fa-check-double'
+    }
+  };
+
+  const theme = badgeThemes[strongBadgeStyle];
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 relative">
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Signal Engine</h3>
             <span className="text-[9px] text-slate-600">Weighted Multi-Factor Analysis</span>
           </div>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${summary.signalClass === 'Strong' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-800 text-slate-400'}`}>
-            {summary.signalClass.toUpperCase()}
-          </span>
+          
+          <div className="flex items-center gap-2">
+             {summary.signalClass === 'Strong' && (
+               <button 
+                onClick={() => setIsConfiguring(!isConfiguring)}
+                className="p-1 text-slate-600 hover:text-slate-400 transition-colors"
+                title="Customize Strong Badge"
+               >
+                 <i className="fas fa-cog text-[10px]"></i>
+               </button>
+             )}
+            
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 transition-all duration-300 ${summary.signalClass === 'Strong' ? theme.className : 'bg-slate-800 text-slate-400'}`}>
+              {summary.signalClass === 'Strong' && <i className={`fas ${theme.icon} text-[9px]`}></i>}
+              {summary.signalClass.toUpperCase()}
+            </span>
+          </div>
         </div>
+
+        {/* Customization Dropdown */}
+        {isConfiguring && summary.signalClass === 'Strong' && (
+          <div className="absolute top-12 right-5 z-20 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl p-2 flex flex-col gap-1 w-32 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="text-[8px] font-bold text-slate-500 uppercase px-1 mb-1">Badge Theme</div>
+            {(Object.keys(badgeThemes) as BadgeStyle[]).map((style) => (
+              <button
+                key={style}
+                onClick={() => {
+                  setStrongBadgeStyle(style);
+                  setIsConfiguring(false);
+                }}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded text-[10px] font-medium transition-colors ${strongBadgeStyle === style ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-750 hover:text-slate-200'}`}
+              >
+                <div className={`w-2 h-2 rounded-full ${badgeThemes[style].className.split(' ')[0]}`}></div>
+                <span className="capitalize">{style}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex justify-around items-end h-20 gap-4 mb-6 pt-2">
           <div className="flex flex-col items-center flex-1">

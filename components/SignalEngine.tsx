@@ -16,19 +16,21 @@ const FactorRow: React.FC<{
   sentiment?: 'bullish' | 'bearish' | 'neutral' | 'warning';
   extra?: React.ReactNode;
 }> = ({ label, value, sentiment, extra }) => {
-  const sentimentClasses = {
-    bullish: 'bg-green-500/15 text-green-400 border border-green-500/30',
-    bearish: 'bg-red-500/15 text-red-400 border border-red-500/30',
-    neutral: 'bg-slate-800/50 text-slate-400 border border-slate-700/50',
-    warning: 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+  const getSentimentClasses = (s?: string) => {
+    switch(s) {
+      case 'bullish': return 'bg-green-500/15 text-green-400 border-green-500/30';
+      case 'bearish': return 'bg-red-500/15 text-red-400 border-red-500/30';
+      case 'warning': return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+      default: return 'bg-slate-800/50 text-slate-400 border-slate-700/50';
+    }
   };
 
   return (
-    <div className="flex justify-between items-center py-2.5 border-b border-slate-800/40 last:border-0">
+    <div className="flex justify-between items-center py-[10px] border-b border-slate-800/40 last:border-0">
       <span className="text-[11px] font-medium text-slate-400">{label}</span>
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-[10px]">
         {extra}
-        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded uppercase tracking-tight ${sentiment ? sentimentClasses[sentiment] : 'text-slate-200'}`}>
+        <span className={`text-[10px] font-bold px-[10px] py-[2px] rounded uppercase tracking-tight border ${getSentimentClasses(sentiment)}`}>
           {value}
         </span>
       </div>
@@ -38,7 +40,7 @@ const FactorRow: React.FC<{
 
 const MiniCalendar: React.FC<{ days: string }> = ({ days }) => (
   <div className="bg-slate-950 border border-slate-700 rounded w-8 h-8 flex flex-col items-center justify-center shadow-inner overflow-hidden">
-    <div className="bg-red-500/90 w-full text-[5px] font-black text-white text-center py-0.5 uppercase tracking-tighter">Days</div>
+    <div className="bg-red-500/90 w-full text-[5px] font-black text-white text-center py-[2px] uppercase tracking-tighter">Days</div>
     <div className="text-[11px] font-bold text-slate-100 flex-1 flex items-center leading-none">{days}</div>
   </div>
 );
@@ -57,14 +59,24 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
     return 'neutral';
   };
 
-  const badgeThemes = {
-    default: { className: 'bg-blue-600 text-white shadow-lg shadow-blue-900/40', icon: 'fa-bolt' },
-    gold: { className: 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-900/40', icon: 'fa-star' },
-    fire: { className: 'bg-orange-600 text-white shadow-lg shadow-orange-900/40', icon: 'fa-fire' },
-    emerald: { className: 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40', icon: 'fa-check-double' }
+  const getBadgeClasses = (style: BadgeStyle, isStrong: boolean) => {
+    if (!isStrong) return 'bg-slate-800 text-slate-400 border border-slate-700';
+    switch(style) {
+      case 'gold': return 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-900/40';
+      case 'fire': return 'bg-orange-600 text-white shadow-lg shadow-orange-900/40';
+      case 'emerald': return 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40';
+      default: return 'bg-blue-600 text-white shadow-lg shadow-blue-900/40';
+    }
   };
 
-  const theme = badgeThemes[strongBadgeStyle];
+  const getBadgeIcon = (style: BadgeStyle) => {
+    switch(style) {
+      case 'gold': return 'fa-star';
+      case 'fire': return 'fa-fire';
+      case 'emerald': return 'fa-check-double';
+      default: return 'fa-bolt';
+    }
+  };
 
   const daysMatch = summary.scoreBreakdown.earningsDesc.match(/\((\d+)d\)/);
   const daysVal = daysMatch ? daysMatch[1] : "?";
@@ -87,8 +99,8 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
                  <i className="fas fa-cog text-[10px]"></i>
                </button>
              )}
-            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 transition-all duration-300 ${summary.signalClass === 'Strong' ? theme.className : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
-              {summary.signalClass === 'Strong' && <i className={`fas ${theme.icon} text-[9px]`}></i>}
+            <span className={`text-[10px] font-extrabold px-[10px] py-[2px] rounded-full flex items-center gap-[6px] transition-all duration-300 ${getBadgeClasses(strongBadgeStyle, summary.signalClass === 'Strong')}`}>
+              {summary.signalClass === 'Strong' && <i className={`fas ${getBadgeIcon(strongBadgeStyle)} text-[9px]`}></i>}
               {summary.signalClass.toUpperCase()}
             </span>
           </div>
@@ -97,13 +109,13 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
         {isConfiguring && summary.signalClass === 'Strong' && (
           <div className="absolute top-12 right-5 z-20 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl p-2 flex flex-col gap-1 w-32">
             <div className="text-[8px] font-bold text-slate-500 uppercase px-1 mb-1">Badge Theme</div>
-            {(Object.keys(badgeThemes) as BadgeStyle[]).map((style) => (
+            {(['default', 'gold', 'fire', 'emerald'] as BadgeStyle[]).map((style) => (
               <button
                 key={style}
                 onClick={() => { setStrongBadgeStyle(style); setIsConfiguring(false); }}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded text-[10px] font-medium transition-colors ${strongBadgeStyle === style ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-750 hover:text-slate-200'}`}
+                className={`flex items-center gap-2 px-2 py-[6px] rounded text-[10px] font-medium transition-colors ${strongBadgeStyle === style ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-750 hover:text-slate-200'}`}
               >
-                <div className={`w-2 h-2 rounded-full ${badgeThemes[style].className.split(' ')[0]}`}></div>
+                <div className={`w-2 h-2 rounded-full ${getBadgeClasses(style, true).split(' ')[0]}`}></div>
                 <span className="capitalize">{style}</span>
               </button>
             ))}
@@ -111,16 +123,22 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
         )}
 
         <div className="flex justify-around items-end h-20 gap-4 mb-8 pt-4">
-          <div className="flex flex-col items-center flex-1">
-            <div className="w-full bg-green-500/10 rounded-t-md relative overflow-hidden" style={{ height: `${summary.callScore}%` }}>
-              <div className="absolute inset-x-0 top-0 h-0.5 bg-green-500"></div>
+          <div className="flex flex-col items-center flex-1 h-full">
+            <div 
+              className="w-full bg-green-500/10 rounded-t-md relative transition-all duration-700 ease-out" 
+              style={{ height: `${summary.callScore}%` }}
+            >
+              <div className="absolute inset-x-0 top-0 h-[2px] bg-green-500"></div>
               <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 text-[10px] font-black text-green-500">{summary.callScore}%</div>
             </div>
             <span className="text-[9px] mt-2 font-bold text-slate-500 tracking-tighter">CALL BIAS</span>
           </div>
-          <div className="flex flex-col items-center flex-1">
-            <div className="w-full bg-red-500/10 rounded-t-md relative overflow-hidden" style={{ height: `${summary.putScore}%` }}>
-              <div className="absolute inset-x-0 top-0 h-0.5 bg-red-500"></div>
+          <div className="flex flex-col items-center flex-1 h-full">
+            <div 
+              className="w-full bg-red-500/10 rounded-t-md relative transition-all duration-700 ease-out" 
+              style={{ height: `${summary.putScore}%` }}
+            >
+              <div className="absolute inset-x-0 top-0 h-[2px] bg-red-500"></div>
               <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 text-[10px] font-black text-red-500">{summary.putScore}%</div>
             </div>
             <span className="text-[9px] mt-2 font-bold text-slate-500 tracking-tighter">PUT BIAS</span>
@@ -128,10 +146,10 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
         </div>
 
         <div className="mb-6 border-t border-slate-800/50 pt-4">
-          <div className="text-[9px] font-black text-slate-600 tracking-widest uppercase mb-3">Factor Breakdown</div>
+          <div className="text-[9px] font-black text-slate-600 tracking-widest uppercase mb-3">Factor Observation</div>
           <div className="flex flex-col">
             <FactorRow label="Trend (MA50)" value={summary.scoreBreakdown.trend} sentiment={getSentiment(summary.scoreBreakdown.trend)} />
-            <FactorRow label="RSI Trend" value={summary.scoreBreakdown.rsiDesc} sentiment={getSentiment(summary.scoreBreakdown.rsiDesc)} />
+            <FactorRow label="RSI Strategy" value={summary.scoreBreakdown.rsiDesc} sentiment={getSentiment(summary.scoreBreakdown.rsiDesc)} />
             <FactorRow label="MACD Momentum" value={summary.scoreBreakdown.macdDesc} sentiment={getSentiment(summary.scoreBreakdown.macdDesc)} />
             <FactorRow label="Option Flow" value={summary.scoreBreakdown.skewDesc} sentiment={getSentiment(summary.scoreBreakdown.skewDesc)} />
             <FactorRow 
@@ -145,10 +163,10 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
         </div>
 
         <div className="pt-4 border-t border-slate-800">
-          <div className="text-[10px] font-black text-blue-500 mb-2 flex items-center gap-1.5">
-            <i className="fas fa-brain"></i> COGNITIVE LAYER
+          <div className="text-[10px] font-black text-blue-500 mb-2 flex items-center gap-[6px] uppercase tracking-wider">
+            <i className="fas fa-brain"></i> Cognitive Layer
           </div>
-          <p className="text-[11px] leading-relaxed text-slate-400 italic">"{aiAnalysis}"</p>
+          <p className="text-[11px] leading-relaxed text-slate-400 italic font-medium">"{aiAnalysis}"</p>
         </div>
       </div>
     </div>

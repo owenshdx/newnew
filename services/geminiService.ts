@@ -11,21 +11,21 @@ export async function generateAisignal(
 ): Promise<string> {
   const latestPrice = priceData[priceData.length - 1];
   const prompt = `
-    Act as a professional options trader. Analyze the following data for ${ticker}:
+    Act as a pro options floor trader. Analyze ${ticker}:
     Price: $${latestPrice.close.toFixed(2)}
     Latest RSI: ${latestPrice.rsi?.toFixed(2) || 'N/A'}
     Technical: Price vs MA50 is ${latestPrice.close > (latestPrice.ma50 || 0) ? 'Above' : 'Below'}.
     Options Activity: ${options.filter(o => o.isUnusual).length} unusual contracts detected.
     
-    Provide a concise (2-sentence) tactical trade recommendation (Call/Put/Neutral) with reasoning based on the RSI and Unusual Volume.
+    Provide a concise (2-sentence) tactical trade recommendation (Call/Put/Neutral) with institutional-level reasoning.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
-        temperature: 0.7,
+        temperature: 0.6,
         maxOutputTokens: 150
       }
     });

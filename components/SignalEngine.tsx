@@ -17,18 +17,18 @@ const FactorRow: React.FC<{
   extra?: React.ReactNode;
 }> = ({ label, value, sentiment, extra }) => {
   const sentimentClasses = {
-    bullish: 'bg-green-500/10 text-green-500 border border-green-500/20',
-    bearish: 'bg-red-500/10 text-red-500 border border-red-500/20',
-    neutral: 'bg-slate-800 text-slate-400 border border-slate-700/50',
-    warning: 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+    bullish: 'bg-green-500/15 text-green-400 border border-green-500/30',
+    bearish: 'bg-red-500/15 text-red-400 border border-red-500/30',
+    neutral: 'bg-slate-800/50 text-slate-400 border border-slate-700/50',
+    warning: 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
   };
 
   return (
-    <div className="flex justify-between items-center py-2.5 border-b border-slate-800/50 last:border-0">
-      <span className="text-[11px] text-slate-400">{label}</span>
-      <div className="flex items-center gap-2">
+    <div className="flex justify-between items-center py-2.5 border-b border-slate-800/40 last:border-0">
+      <span className="text-[11px] font-medium text-slate-400">{label}</span>
+      <div className="flex items-center gap-2.5">
         {extra}
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-tight ${sentiment ? sentimentClasses[sentiment] : 'text-slate-200'}`}>
+        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded uppercase tracking-tight ${sentiment ? sentimentClasses[sentiment] : 'text-slate-200'}`}>
           {value}
         </span>
       </div>
@@ -37,9 +37,9 @@ const FactorRow: React.FC<{
 };
 
 const MiniCalendar: React.FC<{ days: string }> = ({ days }) => (
-  <div className="bg-slate-800 border border-slate-700 rounded w-8 h-8 flex flex-col items-center justify-center shadow-inner overflow-hidden">
-    <div className="bg-red-500/80 w-full text-[5px] font-black text-white text-center py-0.5 uppercase tracking-tighter">Days</div>
-    <div className="text-[11px] font-bold text-slate-100 flex-1 flex items-center">{days}</div>
+  <div className="bg-slate-950 border border-slate-700 rounded w-8 h-8 flex flex-col items-center justify-center shadow-inner overflow-hidden">
+    <div className="bg-red-500/90 w-full text-[5px] font-black text-white text-center py-0.5 uppercase tracking-tighter">Days</div>
+    <div className="text-[11px] font-bold text-slate-100 flex-1 flex items-center leading-none">{days}</div>
   </div>
 );
 
@@ -66,17 +66,16 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
 
   const theme = badgeThemes[strongBadgeStyle];
 
-  // Extract days from summary.scoreBreakdown.earningsDesc (e.g., "Safe (9d)")
   const daysMatch = summary.scoreBreakdown.earningsDesc.match(/\((\d+)d\)/);
   const daysVal = daysMatch ? daysMatch[1] : "?";
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 relative">
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 relative backdrop-blur-md">
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Signal Engine</h3>
-            <span className="text-[9px] text-slate-600">Weighted Multi-Factor Analysis</span>
+            <span className="text-[9px] text-slate-600 font-medium">Weighted Analysis</span>
           </div>
           
           <div className="flex items-center gap-2">
@@ -88,7 +87,7 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
                  <i className="fas fa-cog text-[10px]"></i>
                </button>
              )}
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 transition-all duration-300 ${summary.signalClass === 'Strong' ? theme.className : 'bg-slate-800 text-slate-400'}`}>
+            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 transition-all duration-300 ${summary.signalClass === 'Strong' ? theme.className : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
               {summary.signalClass === 'Strong' && <i className={`fas ${theme.icon} text-[9px]`}></i>}
               {summary.signalClass.toUpperCase()}
             </span>
@@ -111,28 +110,25 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
           </div>
         )}
 
-        <div className="flex justify-around items-end h-20 gap-4 mb-6 pt-2">
+        <div className="flex justify-around items-end h-20 gap-4 mb-8 pt-4">
           <div className="flex flex-col items-center flex-1">
             <div className="w-full bg-green-500/10 rounded-t-md relative overflow-hidden" style={{ height: `${summary.callScore}%` }}>
               <div className="absolute inset-x-0 top-0 h-0.5 bg-green-500"></div>
-              <div className="absolute top-[-18px] left-1/2 -translate-x-1/2 text-[10px] font-bold text-green-500">{summary.callScore}%</div>
+              <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 text-[10px] font-black text-green-500">{summary.callScore}%</div>
             </div>
-            <span className="text-[9px] mt-2 font-bold text-slate-500">CALL BIAS</span>
+            <span className="text-[9px] mt-2 font-bold text-slate-500 tracking-tighter">CALL BIAS</span>
           </div>
           <div className="flex flex-col items-center flex-1">
             <div className="w-full bg-red-500/10 rounded-t-md relative overflow-hidden" style={{ height: `${summary.putScore}%` }}>
               <div className="absolute inset-x-0 top-0 h-0.5 bg-red-500"></div>
-              <div className="absolute top-[-18px] left-1/2 -translate-x-1/2 text-[10px] font-bold text-red-500">{summary.putScore}%</div>
+              <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 text-[10px] font-black text-red-500">{summary.putScore}%</div>
             </div>
-            <span className="text-[9px] mt-2 font-bold text-slate-500">PUT BIAS</span>
+            <span className="text-[9px] mt-2 font-bold text-slate-500 tracking-tighter">PUT BIAS</span>
           </div>
         </div>
 
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <div className="text-[9px] font-bold text-slate-600 tracking-widest uppercase">Factor Observation</div>
-            <div className="text-[9px] font-bold text-slate-600 tracking-widest uppercase">Sentiment</div>
-          </div>
+        <div className="mb-6 border-t border-slate-800/50 pt-4">
+          <div className="text-[9px] font-black text-slate-600 tracking-widest uppercase mb-3">Factor Breakdown</div>
           <div className="flex flex-col">
             <FactorRow label="Trend (MA50)" value={summary.scoreBreakdown.trend} sentiment={getSentiment(summary.scoreBreakdown.trend)} />
             <FactorRow label="RSI Trend" value={summary.scoreBreakdown.rsiDesc} sentiment={getSentiment(summary.scoreBreakdown.rsiDesc)} />
@@ -149,8 +145,8 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
         </div>
 
         <div className="pt-4 border-t border-slate-800">
-          <div className="text-[10px] font-bold text-blue-500 mb-2 flex items-center gap-1">
-            <i className="fas fa-microchip"></i> AI INTELLIGENCE
+          <div className="text-[10px] font-black text-blue-500 mb-2 flex items-center gap-1.5">
+            <i className="fas fa-brain"></i> COGNITIVE LAYER
           </div>
           <p className="text-[11px] leading-relaxed text-slate-400 italic">"{aiAnalysis}"</p>
         </div>

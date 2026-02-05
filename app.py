@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import pytz
 import os
+import re
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -107,13 +108,13 @@ st.markdown("""
         letter-spacing: 1px;
         text-transform: uppercase;
         display: block;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
     }
     .breakdown-item {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 8px 0;
+        padding: 10px 0;
         border-bottom: 1px solid rgba(51, 65, 85, 0.2);
     }
     .breakdown-label {
@@ -132,6 +133,33 @@ st.markdown("""
     .val-neutral { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
     .val-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2); }
     
+    /* Mini-Calendar Styles */
+    .mini-calendar {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .mini-calendar-header {
+        font-size: 6px;
+        text-transform: uppercase;
+        color: #ef4444;
+        font-weight: 900;
+        margin-bottom: 2px;
+    }
+    .mini-calendar-body {
+        font-size: 11px;
+        font-weight: 700;
+        color: #f8fafc;
+    }
+
     .market-badge {
         font-size: 10px;
         font-weight: 700;
@@ -203,11 +231,16 @@ def get_earnings_days(symbol):
         ticker = yf.Ticker(symbol)
         cal = ticker.calendar
         if cal is not None:
-            if isinstance(cal, dict) and 'Earnings Date' in cal: ed = cal['Earnings Date'][0]
-            elif hasattr(cal, 'get') and cal.get('Earnings Date') is not None: ed = cal.get('Earnings Date').iloc[0]
-            else: ed = cal.iloc[0, 0]
+            # Handle different yfinance calendar structures
+            if isinstance(cal, dict) and 'Earnings Date' in cal:
+                ed = cal['Earnings Date'][0]
+            elif hasattr(cal, 'get') and cal.get('Earnings Date') is not None:
+                ed = cal.get('Earnings Date').iloc[0]
+            else:
+                ed = cal.iloc[0, 0]
+            
             if ed and isinstance(ed, (datetime, pd.Timestamp)):
-                return (ed.date() - datetime.now().date()).days
+                return max(0, (ed.date() - datetime.now().date()).days)
         return 99
     except: return 99
 
@@ -321,6 +354,10 @@ def main():
             if any(x in v for x in ['pnlty', 'penalty', 'critical', 'approaching']): return 'val-warning'
             return 'val-neutral'
 
+        # Extract days for mini-calendar widget
+        days_match = re.search(r'\((\d+)d\)', b['earningsDesc'])
+        days_val = days_match.group(1) if days_match else "?"
+
         st.markdown(f"""
             <div class="optix-card">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
@@ -344,7 +381,18 @@ def main():
                     <div class="breakdown-item"><span class="breakdown-label">RSI Trend</span><span class="breakdown-value {get_cls(b['rsi'])}">{b['rsi']}</span></div>
                     <div class="breakdown-item"><span class="breakdown-label">MACD Momentum</span><span class="breakdown-value {get_cls(b['macd'])}">{b['macd']}</span></div>
                     <div class="breakdown-item"><span class="breakdown-label">Option Flow</span><span class="breakdown-value {get_cls(b['volume'])}">{b['volume']}</span></div>
-                    <div class="breakdown-item"><span class="breakdown-label">Earnings Prox</span><span class="breakdown-value {get_cls(b['earningsDesc'])}">{b['earningsDesc']}</span></div>
+                    
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">Earnings Prox</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="mini-calendar">
+                                <span class="mini-calendar-header">Days</span>
+                                <span class="mini-calendar-body">{days_val}</span>
+                            </div>
+                            <span class="breakdown-value {get_cls(b['earningsDesc'])}">{b['earningsDesc']}</span>
+                        </div>
+                    </div>
+                    
                     <div class="breakdown-item" style="border-bottom: none;"><span class="breakdown-label">IV Regime</span><span class="breakdown-value {get_cls(b['iv'])}">{b['iv']}</span></div>
                 </div>
             </div>

@@ -10,7 +10,12 @@ interface SignalProps {
 
 type BadgeStyle = 'default' | 'gold' | 'fire' | 'emerald';
 
-const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' | 'bearish' | 'neutral' | 'warning' }> = ({ label, value, sentiment }) => {
+const FactorRow: React.FC<{ 
+  label: string; 
+  value: string; 
+  sentiment?: 'bullish' | 'bearish' | 'neutral' | 'warning';
+  extra?: React.ReactNode;
+}> = ({ label, value, sentiment, extra }) => {
   const sentimentClasses = {
     bullish: 'bg-green-500/10 text-green-500 border border-green-500/20',
     bearish: 'bg-red-500/10 text-red-500 border border-red-500/20',
@@ -19,9 +24,10 @@ const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' 
   };
 
   return (
-    <div className="flex justify-between items-center py-2 border-b border-slate-800/50 last:border-0">
+    <div className="flex justify-between items-center py-2.5 border-b border-slate-800/50 last:border-0">
       <span className="text-[11px] text-slate-400">{label}</span>
       <div className="flex items-center gap-2">
+        {extra}
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-tight ${sentiment ? sentimentClasses[sentiment] : 'text-slate-200'}`}>
           {value}
         </span>
@@ -29,6 +35,13 @@ const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' 
     </div>
   );
 };
+
+const MiniCalendar: React.FC<{ days: string }> = ({ days }) => (
+  <div className="bg-slate-800 border border-slate-700 rounded w-8 h-8 flex flex-col items-center justify-center shadow-inner overflow-hidden">
+    <div className="bg-red-500/80 w-full text-[5px] font-black text-white text-center py-0.5 uppercase tracking-tighter">Days</div>
+    <div className="text-[11px] font-bold text-slate-100 flex-1 flex items-center">{days}</div>
+  </div>
+);
 
 const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) => {
   const [strongBadgeStyle, setStrongBadgeStyle] = useState<BadgeStyle>('default');
@@ -52,6 +65,10 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
   };
 
   const theme = badgeThemes[strongBadgeStyle];
+
+  // Extract days from summary.scoreBreakdown.earningsDesc (e.g., "Safe (9d)")
+  const daysMatch = summary.scoreBreakdown.earningsDesc.match(/\((\d+)d\)/);
+  const daysVal = daysMatch ? daysMatch[1] : "?";
 
   return (
     <div className="flex flex-col gap-4">
@@ -121,7 +138,12 @@ const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) =>
             <FactorRow label="RSI Trend" value={summary.scoreBreakdown.rsiDesc} sentiment={getSentiment(summary.scoreBreakdown.rsiDesc)} />
             <FactorRow label="MACD Momentum" value={summary.scoreBreakdown.macdDesc} sentiment={getSentiment(summary.scoreBreakdown.macdDesc)} />
             <FactorRow label="Option Flow" value={summary.scoreBreakdown.skewDesc} sentiment={getSentiment(summary.scoreBreakdown.skewDesc)} />
-            <FactorRow label="Earnings Prox" value={summary.scoreBreakdown.earningsDesc} sentiment={getSentiment(summary.scoreBreakdown.earningsDesc)} />
+            <FactorRow 
+              label="Earnings Prox" 
+              value={summary.scoreBreakdown.earningsDesc} 
+              sentiment={getSentiment(summary.scoreBreakdown.earningsDesc)} 
+              extra={<MiniCalendar days={daysVal} />}
+            />
             <FactorRow label="IV Regime" value={summary.scoreBreakdown.ivDesc} sentiment={getSentiment(summary.scoreBreakdown.ivDesc)} />
           </div>
         </div>

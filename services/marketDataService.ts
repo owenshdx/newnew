@@ -16,14 +16,14 @@ export class MarketDataService {
   }
 
   static async fetchTickerSummary(symbol: string): Promise<TickerSummary> {
-    // In a real app, this would be an API call to a backend proxying yfinance.
-    // Here we simulate the deterministic mock behavior or a "live" fetch.
-    await new Promise(r => setTimeout(r, 400)); // Simulate latency
+    await new Promise(r => setTimeout(r, 400)); 
 
     const basePrice = symbol === 'SPY' ? 500 : Math.random() * 200 + 50;
     const change = (Math.random() - 0.4) * 5;
     const callScore = Math.floor(Math.random() * 100);
     const putScore = 100 - callScore;
+    
+    const rsiVal = Math.floor(Math.random() * 80 + 10);
 
     return {
       symbol,
@@ -38,6 +38,11 @@ export class MarketDataService {
         technical: Math.random() * 100,
         options: Math.random() * 100,
         volatility: Math.random() * 100,
+        trend: Math.random() > 0.5 ? 'Above MA50 (+15c)' : 'Below MA50 (+15p)',
+        rsiDesc: `${rsiVal} (${rsiVal < 35 ? 'Oversold +20c' : rsiVal > 65 ? 'Overbought +20p' : 'Neutral'})`,
+        macdDesc: Math.random() > 0.5 ? 'Bullish Cross (+15c)' : 'Bearish Cross (+15p)',
+        skewDesc: Math.random() > 0.6 ? 'Call Heavy (+15c)' : Math.random() > 0.3 ? 'Put Heavy (+15p)' : 'Balanced',
+        ivDesc: Math.random() > 0.7 ? 'High Vol' : 'Normal Regime'
       }
     };
   }
@@ -63,7 +68,6 @@ export class MarketDataService {
       price = close;
     }
 
-    // Add indicators
     const smas = calculateSMA(points, 50);
     const rsis = calculateRSI(points, 14);
     const bbs = calculateBollingerBands(points, 20, 2);
@@ -85,34 +89,39 @@ export class MarketDataService {
     strikes.forEach(strike => {
       ['CALL', 'PUT'].forEach(type => {
         const vol = Math.random() * 5000;
+        const oi = Math.random() * 3000 + 500;
         contracts.push({
           strike,
           type: type as 'CALL' | 'PUT',
           lastPrice: Math.random() * 10,
           change: (Math.random() - 0.5),
           volume: vol,
-          openInterest: Math.random() * 10000,
+          openInterest: oi,
           impliedVolatility: Math.random() * 0.8,
-          isUnusual: vol > 4000
+          isUnusual: false 
         });
       });
     });
 
-    return contracts.sort((a, b) => b.volume - a.volume);
+    const totalChainVol = contracts.reduce((acc, c) => acc + c.volume, 0);
+    const avgVol = totalChainVol / contracts.length;
+
+    return contracts.map(c => ({
+      ...c,
+      isUnusual: c.volume > (avgVol * 3) || (c.volume > c.openInterest * 1.5)
+    })).sort((a, b) => b.volume - a.volume);
   }
 
   static isMarketOpen(): boolean {
     const now = new Date();
-    // Simplified US Market Hours: 9:30 AM - 4:00 PM ET
-    // We'll use local time as a proxy or UTC conversion
     const utcHour = now.getUTCHours();
     const utcMin = now.getUTCMinutes();
-    const etHour = utcHour - 5; // Eastern Standard Time (no DST adjustment for simple logic)
+    const etHour = utcHour - 5;
     
     const day = now.getUTCDay();
-    if (day === 0 || day === 6) return false; // Weekend
+    if (day === 0 || day === 6) return false;
     
     const totalMinutes = etHour * 60 + utcMin;
-    return totalMinutes >= 570 && totalMinutes <= 960; // 9:30 - 16:00
+    return totalMinutes >= 570 && totalMinutes <= 960;
   }
 }

@@ -38,6 +38,12 @@ export interface TickerSummary {
     technical: number;
     options: number;
     volatility: number;
+    // Descriptive factors
+    trend: string;
+    rsiDesc: string;
+    macdDesc: string;
+    skewDesc: string;
+    ivDesc: string;
   };
 }
 

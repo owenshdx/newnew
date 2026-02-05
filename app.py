@@ -56,9 +56,9 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
-        height: 100px;
+        height: 80px;
         gap: 10px;
-        margin-top: 20px;
+        margin-top: 15px;
     }
     .signal-bar-wrapper {
         flex: 1;
@@ -78,6 +78,32 @@ st.markdown("""
         margin-top: 8px;
     }
     
+    /* Breakdown Items */
+    .breakdown-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+    }
+    .breakdown-label {
+        font-size: 11px;
+        color: #94a3b8;
+    }
+    .breakdown-value {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .val-bullish { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    .val-bearish { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .val-neutral { background: rgba(148, 163, 184, 0.1); color: #94a3b8; }
+    
     /* Header Badge */
     .market-badge {
         font-size: 10px;
@@ -89,7 +115,14 @@ st.markdown("""
     .badge-open { background-color: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.2); }
     .badge-closed { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
     
-    /* Hide Streamlit components for a cleaner look */
+    /* Checkbox Styling */
+    .stCheckbox > label {
+        color: #94a3b8 !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Hide Streamlit components */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -122,11 +155,21 @@ def get_options_data(symbol):
 def calculate_indicators(df):
     if df is None or df.empty: return df
     df['SMA50'] = df['Close'].rolling(window=50).mean()
+    
+    # RSI
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # MACD
+    exp12 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp26 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp12 - exp26
+    df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    
+    # BB
     df['BB_Mid'] = df['Close'].rolling(window=20).mean()
     df['BB_Std'] = df['Close'].rolling(window=20).std()
     df['BB_Upper'] = df['BB_Mid'] + (df['BB_Std'] * 2)
@@ -134,18 +177,77 @@ def calculate_indicators(df):
     return df
 
 def get_scores(df, options):
-    if df is None or len(df) < 2: return 0, 0, "Wait"
+    if df is None or len(df) < 2: return 0, 0, "Wait", {}
     latest = df.iloc[-1]
-    c_score, p_score = 40, 40 # Base
-    if latest['Close'] > latest.get('SMA50', 0): c_score += 15
-    else: p_score += 15
-    if latest.get('RSI', 50) < 35: c_score += 20
-    elif latest.get('RSI', 50) > 65: p_score += 20
+    
+    breakdown = {
+        'trend': 'Neutral',
+        'rsi': 'Neutral',
+        'macd': 'Neutral',
+        'volume': 'Neutral',
+        'iv': 'Neutral'
+    }
+    
+    c_score, p_score = 40, 40 # Base neutrality
+    
+    # 1. Trend (Price vs SMA50)
+    sma50 = latest.get('SMA50', latest['Close'])
+    if latest['Close'] > sma50: 
+        c_score += 15
+        breakdown['trend'] = f"Above MA50 (+15c)"
+    else: 
+        p_score += 15
+        breakdown['trend'] = f"Below MA50 (+15p)"
+        
+    # 2. RSI Sentiment
+    rsi = latest.get('RSI', 50)
+    if rsi < 35: 
+        c_score += 20
+        breakdown['rsi'] = f"{int(rsi)} (Oversold +20c)"
+    elif rsi > 65: 
+        p_score += 20
+        breakdown['rsi'] = f"{int(rsi)} (Overbought +20p)"
+    else:
+        breakdown['rsi'] = f"{int(rsi)} (Neutral)"
+
+    # 3. MACD Momentum
+    macd = latest.get('MACD', 0)
+    signal = latest.get('MACD_Signal', 0)
+    if macd > signal:
+        c_score += 15
+        breakdown['macd'] = f"Bullish Cross (+15c)"
+    else:
+        p_score += 15
+        breakdown['macd'] = f"Bearish Cross (+15p)"
+        
+    # 4. Options Volume Imbalance
     if options:
-        if options['calls']['volume'].sum() > options['puts']['volume'].sum(): c_score += 15
-        else: p_score += 15
+        c_vol = options['calls']['volume'].sum()
+        p_vol = options['puts']['volume'].sum()
+        total_vol = c_vol + p_vol
+        if total_vol > 0:
+            c_pct = (c_vol / total_vol) * 100
+            if c_pct > 55: 
+                c_score += 15
+                breakdown['volume'] = f"Call Heavy (+15c)"
+            elif c_pct < 45:
+                p_score += 15
+                breakdown['volume'] = f"Put Heavy (+15p)"
+            else:
+                breakdown['volume'] = "Balanced"
+        else:
+            breakdown['volume'] = "No Data"
+            
+    # 5. IV Regime
+    if options:
+        avg_iv = options['calls']['impliedVolatility'].mean()
+        iv_display = f"{int(avg_iv * 100)}%"
+        if avg_iv < 0.2: breakdown['iv'] = f"Low ({iv_display})"
+        elif avg_iv > 0.5: breakdown['iv'] = f"High ({iv_display})"
+        else: breakdown['iv'] = f"Normal ({iv_display})"
+
     status = "Strong" if c_score > 75 or p_score > 75 else "Moderate" if c_score > 60 or p_score > 60 else "Weak"
-    return min(c_score, 100), min(p_score, 100), status
+    return min(c_score, 100), min(p_score, 100), status, breakdown
 
 def get_market_status():
     tz = pytz.timezone('US/Eastern')
@@ -157,7 +259,6 @@ def get_market_status():
 
 # --- APP UI ---
 def main():
-    # Sidebar Watchlist
     st.sidebar.markdown("<h2 style='color:#f8fafc; font-size:1.2rem; margin-bottom:20px;'>📁 WATCHLIST</h2>", unsafe_allow_html=True)
     if 'watchlist' not in st.session_state:
         st.session_state.watchlist = ["AAPL", "TSLA", "SPY", "NFLX", "AMZN", "GOOGL"]
@@ -170,7 +271,6 @@ def main():
             
     selected_ticker = st.sidebar.selectbox("ACTIVE TERMINAL", st.session_state.watchlist)
     
-    # Header logic
     isOpen, status_str = get_market_status()
     badge_class = "badge-open" if isOpen else "badge-closed"
     
@@ -184,19 +284,18 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
-    # Main Grid
     col_left, col_right = st.columns([1, 3])
 
     with col_left:
-        # Signal Engine Card
         df = get_history_data(selected_ticker)
         options = get_options_data(selected_ticker)
         df = calculate_indicators(df)
-        c_score, p_score, strength = get_scores(df, options)
+        c_score, p_score, strength, bdown = get_scores(df, options)
         
+        # Signal Engine Card with Expanded Breakdown
         st.markdown(f"""
             <div class="optix-card">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                     <span style="font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px;">SIGNAL ENGINE</span>
                     <span style="font-size: 10px; font-weight: 700; background: #1e293b; color: #3b82f6; padding: 2px 8px; border-radius: 4px;">{strength.upper()}</span>
                 </div>
@@ -210,20 +309,41 @@ def main():
                         <div class="signal-label">PUT {p_score}%</div>
                     </div>
                 </div>
+                
+                <div style="margin-top: 25px;">
+                    <span style="font-size: 9px; font-weight: 700; color: #475569; letter-spacing: 1px; text-transform: uppercase;">Factor Breakdown</span>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">Price vs MA50</span>
+                        <span class="breakdown-value {'val-bullish' if '+15c' in bdown['trend'] else 'val-bearish'}">{bdown['trend']}</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">RSI Trend</span>
+                        <span class="breakdown-value {'val-bullish' if '+20c' in bdown['rsi'] else 'val-bearish' if '+20p' in bdown['rsi'] else 'val-neutral'}">{bdown['rsi']}</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">MACD Cross</span>
+                        <span class="breakdown-value {'val-bullish' if '+15c' in bdown['macd'] else 'val-bearish'}">{bdown['macd']}</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">Vol Imbalance</span>
+                        <span class="breakdown-value {'val-bullish' if '+15c' in bdown['volume'] else 'val-bearish' if '+15p' in bdown['volume'] else 'val-neutral'}">{bdown['volume']}</span>
+                    </div>
+                    <div class="breakdown-item" style="border-bottom: none;">
+                        <span class="breakdown-label">IV Regime</span>
+                        <span class="breakdown-value val-neutral">{bdown['iv']}</span>
+                    </div>
+                </div>
             </div>
         """, unsafe_allow_html=True)
         
-        # Stats Card
         if df is not None:
             price = df['Close'].iloc[-1]
             change = price - df['Close'].iloc[-2]
             st.markdown('<div class="optix-card">', unsafe_allow_html=True)
             st.metric(selected_ticker, f"${price:.2f}", f"{change:.2f}")
-            st.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}")
             st.markdown('</div>', unsafe_allow_html=True)
 
     with col_right:
-        # Chart Card
         if df is not None:
             st.markdown('<div class="optix-card" style="padding: 10px;">', unsafe_allow_html=True)
             fig = go.Figure()
@@ -248,15 +368,37 @@ def main():
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # Options Table Card
         if options:
             st.markdown('<div class="optix-card">', unsafe_allow_html=True)
-            st.markdown(f"<span style='font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px; margin-bottom: 15px; display: block;'>OPTIONS FLOW: {options['expiry']}</span>", unsafe_allow_html=True)
+            
+            # Header with Unusual Volume Filter
+            col_opt_h1, col_opt_h2 = st.columns([2, 1])
+            with col_opt_h1:
+                st.markdown(f"<span style='font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px; display: block;'>OPTIONS FLOW: {options['expiry']}</span>", unsafe_allow_html=True)
+            with col_opt_h2:
+                unusual_only = st.checkbox("UNUSUAL VOL ONLY", key="unusual_filter")
+            
             t1, t2 = st.tabs(["CALLS", "PUTS"])
+            
+            def process_contracts(df, filter_active):
+                avg_vol = df['volume'].mean()
+                if filter_active:
+                    return df[ (df['volume'] > avg_vol * 2) | (df['volume'] > df['openInterest']) ].sort_values('volume', ascending=False)
+                return df.sort_values('volume', ascending=False).head(10)
+
             with t1:
-                st.dataframe(options['calls'].sort_values('volume', ascending=False).head(5)[['strike', 'lastPrice', 'volume', 'impliedVolatility']], use_container_width=True)
+                calls_df = process_contracts(options['calls'], unusual_only)
+                if calls_df.empty:
+                    st.info("No unusual volume detected in Calls.")
+                else:
+                    st.dataframe(calls_df[['strike', 'lastPrice', 'volume', 'openInterest', 'impliedVolatility']], use_container_width=True)
             with t2:
-                st.dataframe(options['puts'].sort_values('volume', ascending=False).head(5)[['strike', 'lastPrice', 'volume', 'impliedVolatility']], use_container_width=True)
+                puts_df = process_contracts(options['puts'], unusual_only)
+                if puts_df.empty:
+                    st.info("No unusual volume detected in Puts.")
+                else:
+                    st.dataframe(puts_df[['strike', 'lastPrice', 'volume', 'openInterest', 'impliedVolatility']], use_container_width=True)
+            
             st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":

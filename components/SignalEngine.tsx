@@ -8,65 +8,112 @@ interface SignalProps {
   aiAnalysis: string;
 }
 
+const FactorRow: React.FC<{ label: string; value: string; sentiment?: 'bullish' | 'bearish' | 'neutral' }> = ({ label, value, sentiment }) => {
+  const sentimentClasses = {
+    bullish: 'bg-green-500/10 text-green-500',
+    bearish: 'bg-red-500/10 text-red-500',
+    neutral: 'bg-slate-800 text-slate-400'
+  };
+
+  return (
+    <div className="flex justify-between items-center py-2 border-b border-slate-800/50 last:border-0">
+      <span className="text-[11px] text-slate-400">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight ${sentiment ? sentimentClasses[sentiment] : 'text-slate-200'}`}>
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+};
+
 const SignalEngine: React.FC<SignalProps> = ({ ticker, summary, aiAnalysis }) => {
   if (!summary) return null;
 
-  const bias = summary.callScore > summary.putScore ? 'BULLISH' : 'BEARISH';
-  const biasColor = bias === 'BULLISH' ? 'text-green-400' : 'text-red-400';
+  const getSentiment = (val: string): 'bullish' | 'bearish' | 'neutral' => {
+    const lower = val.toLowerCase();
+    if (lower.includes('bullish') || lower.includes('above') || lower.includes('oversold') || lower.includes('call')) return 'bullish';
+    if (lower.includes('bearish') || lower.includes('below') || lower.includes('overbought') || lower.includes('put')) return 'bearish';
+    return 'neutral';
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">Signal Engine</h3>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${summary.signalClass === 'Strong' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-            {summary.signalClass}
+          <div className="flex flex-col">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Signal Engine</h3>
+            <span className="text-[9px] text-slate-600">Weighted Multi-Factor Analysis</span>
+          </div>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${summary.signalClass === 'Strong' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-800 text-slate-400'}`}>
+            {summary.signalClass.toUpperCase()}
           </span>
         </div>
 
-        <div className="flex justify-around items-end h-24 gap-4 mb-4">
+        <div className="flex justify-around items-end h-20 gap-4 mb-6 pt-2">
           <div className="flex flex-col items-center flex-1">
             <div 
-              className="w-full bg-green-500/20 rounded-t-md relative transition-all duration-700"
+              className="w-full bg-green-500/10 rounded-t-md relative transition-all duration-700 overflow-hidden"
               style={{ height: `${summary.callScore}%` }}
             >
-              <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 text-[10px] font-bold text-green-500">{summary.callScore}</div>
+              <div className="absolute inset-x-0 top-0 h-0.5 bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-green-500/5 to-transparent"></div>
+              <div className="absolute top-[-18px] left-1/2 -translate-x-1/2 text-[10px] font-bold text-green-500">{summary.callScore}%</div>
             </div>
-            <span className="text-[10px] mt-2 font-bold text-slate-500">CALL</span>
+            <span className="text-[9px] mt-2 font-bold text-slate-500">CALL BIAS</span>
           </div>
           <div className="flex flex-col items-center flex-1">
             <div 
-              className="w-full bg-red-500/20 rounded-t-md relative transition-all duration-700"
+              className="w-full bg-red-500/10 rounded-t-md relative transition-all duration-700 overflow-hidden"
               style={{ height: `${summary.putScore}%` }}
             >
-              <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 text-[10px] font-bold text-red-500">{summary.putScore}</div>
+              <div className="absolute inset-x-0 top-0 h-0.5 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-red-500/5 to-transparent"></div>
+              <div className="absolute top-[-18px] left-1/2 -translate-x-1/2 text-[10px] font-bold text-red-500">{summary.putScore}%</div>
             </div>
-            <span className="text-[10px] mt-2 font-bold text-slate-500">PUT</span>
+            <span className="text-[9px] mt-2 font-bold text-slate-500">PUT BIAS</span>
           </div>
         </div>
 
-        <div className="space-y-3 mb-4">
-          <div className="flex justify-between text-xs">
-            <span className="text-slate-400">Technical Trend</span>
-            <span className="font-mono text-slate-200">{summary.scoreBreakdown.technical.toFixed(0)}</span>
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <div className="text-[9px] font-bold text-slate-600 tracking-widest uppercase">Factor Observation</div>
+            <div className="text-[9px] font-bold text-slate-600 tracking-widest uppercase">Score Imp.</div>
           </div>
-          <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500" style={{ width: `${summary.scoreBreakdown.technical}%` }}></div>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-slate-400">Options Skew</span>
-            <span className="font-mono text-slate-200">{summary.scoreBreakdown.options.toFixed(0)}</span>
-          </div>
-          <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-purple-500" style={{ width: `${summary.scoreBreakdown.options}%` }}></div>
+          <div className="flex flex-col">
+            <FactorRow 
+              label="Price vs MA50" 
+              value={summary.scoreBreakdown.trend} 
+              sentiment={getSentiment(summary.scoreBreakdown.trend)}
+            />
+            <FactorRow 
+              label="RSI Trend" 
+              value={summary.scoreBreakdown.rsiDesc} 
+              sentiment={getSentiment(summary.scoreBreakdown.rsiDesc)}
+            />
+            <FactorRow 
+              label="MACD Analysis" 
+              value={summary.scoreBreakdown.macdDesc} 
+              sentiment={getSentiment(summary.scoreBreakdown.macdDesc)}
+            />
+            <FactorRow 
+              label="Options Skew" 
+              value={summary.scoreBreakdown.skewDesc} 
+              sentiment={getSentiment(summary.scoreBreakdown.skewDesc)}
+            />
+            <FactorRow 
+              label="IV Regime" 
+              value={summary.scoreBreakdown.ivDesc} 
+              sentiment="neutral"
+            />
           </div>
         </div>
 
         <div className="pt-4 border-t border-slate-800">
           <div className="text-[10px] font-bold text-blue-500 mb-2 flex items-center gap-1">
-            <i className="fas fa-robot"></i> AI ANALYSIS
+            <i className="fas fa-microchip"></i> AI INTELLIGENCE
           </div>
-          <p className="text-xs leading-relaxed text-slate-300 italic">
+          <p className="text-[11px] leading-relaxed text-slate-400 italic">
             &quot;{aiAnalysis}&quot;
           </p>
         </div>

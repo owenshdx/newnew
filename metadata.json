@@ -1,0 +1,5 @@
+{
+  "name": "Optix: Personal Options Analysis Dashboard",
+  "description": "A high-performance, local-first dashboard for stock and options analysis. Features interactive candlestick charts with technical indicators, unusual options volume detection, and an AI-driven signal engine that computes trade scores based on multi-factor analysis.",
+  "requestFramePermissions": []
+}
